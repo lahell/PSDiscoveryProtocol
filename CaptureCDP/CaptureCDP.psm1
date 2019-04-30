@@ -75,21 +75,23 @@ function Capture-CDPPacket {
         [Int16]$Duration = 62
     )
 
-    process {
 
-        $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    Begin {
+            $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
         $Principal = New-Object Security.Principal.WindowsPrincipal $Identity
         if (-not $Principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
             throw 'Capture-CDPPacket requires elevation. Please run PowerShell as administrator.'
         }
-
+    }
+    process {
+    
         foreach ($Computer in $ComputerName) {
 
             try {
                 $CimSession = New-CimSession -ComputerName $Computer -ErrorAction Stop
             } catch {
                 Write-Warning "Unable to create CimSession. Please make sure WinRM and PSRemoting is enabled on $Computer."
-                return
+                continue
             }
 
             $ETLFile = Invoke-Command -ComputerName $Computer -ScriptBlock {
