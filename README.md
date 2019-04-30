@@ -13,7 +13,7 @@ Parse-CDPPacket -Packet $Packet
 #### Output
 ```
 Port      : FastEthernet0/1 
-Switch    : SWITCH1.domain.example 
+Device    : SWITCH1.domain.example 
 Model     : cisco WS-C2960-48TT-L 
 IPAddress : 192.0.2.10
 VLAN      : 10
@@ -28,13 +28,13 @@ VLAN      : 10
 #### Output
 ```
 Port      : FastEthernet0/1 
-Switch    : SWITCH1.domain.example 
+Device    : SWITCH1.domain.example 
 Model     : cisco WS-C2960-48TT-L 
 IPAddress : 192.0.2.10
 VLAN      : 10
 
 Port      : FastEthernet0/2 
-Switch    : SWITCH1.domain.example 
+Device    : SWITCH1.domain.example 
 Model     : cisco WS-C2960-48TT-L 
 IPAddress : 192.0.2.10
 VLAN      : 20
