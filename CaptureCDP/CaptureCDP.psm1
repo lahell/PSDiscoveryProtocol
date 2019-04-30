@@ -75,7 +75,6 @@ function Capture-CDPPacket {
         [Int16]$Duration = 62
     )
 
-
     begin {
         $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
         $Principal = New-Object Security.Principal.WindowsPrincipal $Identity
@@ -148,6 +147,8 @@ function Capture-CDPPacket {
             }
         }
     }
+
+    end {}
 }
 #endregion
 
@@ -216,6 +217,8 @@ function Parse-CDPPacket {
         [object[]]$Packet
     )
 
+    begin {}
+
     process {
 
         $Offset = 26
@@ -246,6 +249,8 @@ function Parse-CDPPacket {
         return [PSCustomObject]$Hash
 
     }
+
+    end {}
 
 }
 #endregion
