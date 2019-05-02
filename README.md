@@ -1,7 +1,7 @@
-CaptureCDP
+PSDiscoveryProtocol
 ==========
 
-Capture and parse CDP packets on local or remote computers
+Capture and parse CDP and LLDP packets on local or remote computers
 
 ### Capture and parse on local computer
 
