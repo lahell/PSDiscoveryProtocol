@@ -125,9 +125,9 @@ function Capture-CDPPacket {
                 $Log = Invoke-Command -ComputerName $Computer -ScriptBlock {
                     Get-WinEvent -Path $args[0] -Oldest | 
                         Where-Object {
-							$_.Id -eq 1001 -and 
-							[UInt16]0x2000 -eq [BitConverter]::ToUInt16($_.Properties[3].Value[21..20], 0)
-						} |
+                            $_.Id -eq 1001 -and 
+                            [UInt16]0x2000 -eq [BitConverter]::ToUInt16($_.Properties[3].Value[21..20], 0)
+                        } |
                         Select-Object -Last 1 -ExpandProperty Properties
                 } -ArgumentList $Session.LocalFilePath
 
@@ -241,11 +241,11 @@ function Parse-CDPPacket {
                 10 { $Hash.Add('VLAN',      [BitConverter]::ToUInt16($Packet[($Offset + 5)..($Offset + 4)], 0)) }
             }
 
-	        if ($Length -eq 0 ) {
-		        $Offset = $Packet.Length
-	        }
+            if ($Length -eq 0 ) {
+                $Offset = $Packet.Length
+            }
 
-	        $Offset = $Offset + $Length
+            $Offset = $Offset + $Length
 
         }
 
@@ -382,37 +382,37 @@ function Parse-LLDPPacket
  
         while ($Offset -lt $Packet.Length)
         {
-		    $Type = $Packet[$Offset] -shr 1
-		    $Length = [BitConverter]::ToUInt16($Packet[($Offset + 1)..$Offset], 0) -band $Mask
-		    $Offset += 2
+            $Type = $Packet[$Offset] -shr 1
+            $Length = [BitConverter]::ToUInt16($Packet[($Offset + 1)..$Offset], 0) -band $Mask
+            $Offset += 2
 
-		    switch ($Type)
+            switch ($Type)
             {
-			    1 {
+                1 {
                     # Chassis ID
-				    $Subtype = $Packet[$Offset]
-				    $Offset += 1
-				    $Length -= 1
+                    $Subtype = $Packet[$Offset]
+                    $Offset += 1
+                    $Length -= 1
  
-				    if ($Subtype -eq 4)
-				    {
-					    $ChassisID = [PSCustomObject] @{
+                    if ($Subtype -eq 4)
+                    {
+                        $ChassisID = [PSCustomObject] @{
                             Type = 'MAC Address'
                             ID = [PhysicalAddress]::new($Packet[$Offset..($Offset + 5)])
                         }
-					    $Offset += 6
-				    }
+                        $Offset += 6
+                    }
 
-				    if ($Subtype -eq 6)
-				    {
-					    $ChassisID = [PSCustomObject] @{
+                    if ($Subtype -eq 6)
+                    {
+                        $ChassisID = [PSCustomObject] @{
                             Type = 'Interface Name'
                             ID = [System.Text.Encoding]::ASCII.GetString($Packet[$Offset..($Offset + $Length)])
                         }
                         $Offset += $Length
-				    }
-				    break
-			    }
+                    }
+                    break
+                }
 
                 2 { 
                     $Hash.Add('Port', [System.Text.Encoding]::ASCII.GetString($Packet[($Offset + 1)..($Offset + $Length - 1)]))
@@ -434,12 +434,12 @@ function Parse-LLDPPacket
 
                 8 {
                     $AddrLen = $Packet[($Offset)]
-				    $Subtype = $Packet[($Offset + 1)]
+                    $Subtype = $Packet[($Offset + 1)]
 
                     if ($Subtype -eq 1)
-				    {
+                    {
                         $Hash.Add('IPAddress', ([System.Net.IPAddress][byte[]]$Packet[($Offset + 2)..($Offset + $AddrLen)]).IPAddressToString)
-				    }
+                    }
                     $Offset += $Length
                     break
                 }
@@ -482,8 +482,8 @@ function Parse-LLDPPacket
                     Write-Verbose $Tlv
                     $Offset += $Length
                     break
-		        }
-		    }
+                }
+            }
         }
         [PSCustomObject]$Hash
     }
