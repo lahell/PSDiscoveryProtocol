@@ -1,5 +1,5 @@
 PSDiscoveryProtocol
-==========
+——————————————————-
 
 Capture and parse CDP and LLDP packets on local or remote computers
 
