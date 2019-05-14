@@ -8,7 +8,7 @@ Capture and parse CDP and LLDP packets on local or remote computers
 Install-Module -Name PSDiscoveryProtocol
 ```
 
-### Capture and parse on local computer
+### Capture and parse LLDP on local computer
 
 ```PowerShell
 $Packet = Capture-LLDPPacket
@@ -25,7 +25,7 @@ Device      : SWITCH1.domain.example
 IPAddress   : 192.0.2.10
 ```
 
-### Capture and parse on remote computers
+### Capture and parse CDP on remote computers
 
 ```PowerShell
 'COMPUTER1', 'COMPUTER2' | Capture-CDPPacket | Parse-CDPPacket
