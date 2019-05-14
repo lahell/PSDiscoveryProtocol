@@ -2,6 +2,12 @@
 
 Capture and parse CDP and LLDP packets on local or remote computers
 
+### Installation
+
+```PowerShell
+Install-Module -Name PSDiscoveryProtocol
+```
+
 ### Capture and parse on local computer
 
 ```PowerShell
