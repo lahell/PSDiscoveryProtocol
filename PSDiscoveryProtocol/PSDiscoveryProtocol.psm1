@@ -166,7 +166,7 @@ function Parse-CDPPacket {
 
 .DESCRIPTION
 
-    Parse CDP packet to get port, switch, model, ipaddress and vlan.
+    Parse CDP packet to get port, device, model, ipaddress and vlan.
 
 .PARAMETER Packet
 
@@ -259,8 +259,74 @@ function Parse-CDPPacket {
 #endregion
 
 #region function Capture-LLDPPacket
-function Capture-LLDPPacket
-{
+function Capture-LLDPPacket {
+
+<#
+
+.SYNOPSIS
+
+    Capture LLDP packets on local or remote computers
+
+.DESCRIPTION
+
+    Capture LLDP packets on local or remote computers.
+    This cmdlet will start a packet capture and save the captured packets in a temporary ETL file. 
+    Only the first LLDP packet in the ETL file will be returned.
+
+    Requires elevation (Run as Administrator).
+    WinRM and PowerShell remoting must be enabled on the target computer.
+
+.PARAMETER ComputerName
+
+    Specifies one or more computers on which to capture LLDP packets. Defaults to $env:COMPUTERNAME.
+
+.PARAMETER Duration
+
+    Specifies the duration for which the LLDP packets are captured, in seconds. Defaults to 32.
+
+.EXAMPLE
+
+    PS> $Packet = Capture-LLDPPacket
+    PS> Parse-LLDPPacket -Packet $Packet
+
+    Model       : WS-C2960-48TT-L 
+    Description : HR Workstation
+    VLAN        : 10
+    Port        : Fa0/1
+    Device      : SWITCH1.domain.example 
+    IPAddress   : 192.0.2.10
+
+.EXAMPLE
+
+    PS> Capture-LLDPPacket -Computer COMPUTER1 | Parse-LLDPPacket
+
+    Model       : WS-C2960-48TT-L 
+    Description : HR Workstation
+    VLAN        : 10
+    Port        : Fa0/1
+    Device      : SWITCH1.domain.example 
+    IPAddress   : 192.0.2.10
+
+.EXAMPLE
+
+    PS> 'COMPUTER1', 'COMPUTER2' | Capture-LLDPPacket | Parse-LLDPPacket
+
+    Model       : WS-C2960-48TT-L 
+    Description : HR Workstation
+    VLAN        : 10
+    Port        : Fa0/1
+    Device      : SWITCH1.domain.example 
+    IPAddress   : 192.0.2.10
+
+    Model       : WS-C2960-48TT-L 
+    Description : IT Workstation
+    VLAN        : 20
+    Port        : Fa0/2
+    Device      : SWITCH1.domain.example 
+    IPAddress   : 192.0.2.10
+
+#>
+
     [CmdletBinding()]
     param(
         [Parameter(Position=0, 
@@ -357,8 +423,65 @@ function Capture-LLDPPacket
 #endregion
 
 #region function Parse-LLDPPacket
-function Parse-LLDPPacket
-{
+function Parse-LLDPPacket {
+
+<#
+
+.SYNOPSIS
+
+    Parse LLDP packet returned from Capture-LLDPPacket.
+
+.DESCRIPTION
+
+    Parse LLDP packet to get port, description, device, model, ipaddress and vlan.
+
+.PARAMETER Packet
+
+    Array of one or more byte arrays from Capture-LLDPPacket. 
+   
+.EXAMPLE
+
+    PS> $Packet = Capture-LLDPPacket
+    PS> Parse-LLDPPacket -Packet $Packet
+
+    Model       : WS-C2960-48TT-L 
+    Description : HR Workstation
+    VLAN        : 10
+    Port        : Fa0/1
+    Device      : SWITCH1.domain.example 
+    IPAddress   : 192.0.2.10
+
+.EXAMPLE
+
+    PS> Capture-LLDPPacket -Computer COMPUTER1 | Parse-LLDPPacket
+
+    Model       : WS-C2960-48TT-L 
+    Description : HR Workstation
+    VLAN        : 10
+    Port        : Fa0/1
+    Device      : SWITCH1.domain.example 
+    IPAddress   : 192.0.2.10
+
+.EXAMPLE
+
+    PS> 'COMPUTER1', 'COMPUTER2' | Capture-LLDPPacket | Parse-LLDPPacket
+
+    Model       : WS-C2960-48TT-L 
+    Description : HR Workstation
+    VLAN        : 10
+    Port        : Fa0/1
+    Device      : SWITCH1.domain.example 
+    IPAddress   : 192.0.2.10
+
+    Model       : WS-C2960-48TT-L 
+    Description : IT Workstation
+    VLAN        : 20
+    Port        : Fa0/2
+    Device      : SWITCH1.domain.example 
+    IPAddress   : 192.0.2.10
+
+#>
+
     [CmdletBinding()]
     param(
         [Parameter(Position=0, 
@@ -491,4 +614,3 @@ function Parse-LLDPPacket
     end {}
 }
 #endregion
-

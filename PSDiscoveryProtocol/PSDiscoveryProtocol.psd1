@@ -30,7 +30,7 @@ Author = 'lahell'
 Copyright = '(c) 2019 lahell. All rights reserved.'
 
 # Description of the functionality provided by this module
-Description = 'Capture and parse CDP packets on local or remote computers'
+Description = 'Capture and parse CDP and LLDP packets on local or remote computers'
 
 # Minimum version of the Windows PowerShell engine required by this module
 PowerShellVersion = '5.1'
