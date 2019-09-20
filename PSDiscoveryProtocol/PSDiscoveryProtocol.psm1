@@ -498,6 +498,10 @@ function Parse-LLDPPacket {
         $Destination = [PhysicalAddress]::new($Packet[0..5])
         $Source      = [PhysicalAddress]::new($Packet[6..11])
         $LLDP        = [BitConverter]::ToUInt16($Packet[13..12], 0)
+        
+        Write-Verbose "Destination: $Destination"
+        Write-Verbose "Source: $Source"
+        Write-Verbose "LLDP: $LLDP"
 
         $Offset = 14
         $Mask = 0x01FF
