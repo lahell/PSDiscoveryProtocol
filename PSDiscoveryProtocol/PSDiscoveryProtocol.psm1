@@ -498,7 +498,7 @@ function Parse-LLDPPacket {
         $Destination = [PhysicalAddress]::new($Packet[0..5])
         $Source      = [PhysicalAddress]::new($Packet[6..11])
         $LLDP        = [BitConverter]::ToUInt16($Packet[13..12], 0)
-        
+
         Write-Verbose "Destination: $Destination"
         Write-Verbose "Source: $Source"
         Write-Verbose "LLDP: $LLDP"
@@ -515,32 +515,6 @@ function Parse-LLDPPacket {
 
             switch ($Type)
             {
-                1 {
-                    # Chassis ID
-                    $Subtype = $Packet[$Offset]
-                    $Offset += 1
-                    $Length -= 1
-
-                    if ($Subtype -eq 4)
-                    {
-                        $ChassisID = [PSCustomObject] @{
-                            Type = 'MAC Address'
-                            ID = [PhysicalAddress]::new($Packet[$Offset..($Offset + 5)])
-                        }
-                        $Offset += 6
-                    }
-
-                    if ($Subtype -eq 6)
-                    {
-                        $ChassisID = [PSCustomObject] @{
-                            Type = 'Interface Name'
-                            ID = [System.Text.Encoding]::ASCII.GetString($Packet[$Offset..($Offset + $Length)])
-                        }
-                        $Offset += $Length
-                    }
-                    break
-                }
-
                 2 {
                     $Hash.Add('Port', [System.Text.Encoding]::ASCII.GetString($Packet[($Offset + 1)..($Offset + $Length - 1)]))
                     $Offset += $Length
