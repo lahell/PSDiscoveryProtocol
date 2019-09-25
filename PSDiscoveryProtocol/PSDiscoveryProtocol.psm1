@@ -491,7 +491,15 @@ function Parse-LLDPPacket {
         [object[]]$Packet
     )
 
-    begin {}
+    begin {
+        $TlvType = @{
+            PortId               = 2
+            PortDescription      = 4
+            SystemName           = 5
+            ManagementAddress    = 8
+            OrganizationSpecific = 127
+        }
+    }
 
     process {
 
@@ -515,25 +523,34 @@ function Parse-LLDPPacket {
 
             switch ($Type)
             {
-                2 {
-                    $Hash.Add('Port', [System.Text.Encoding]::ASCII.GetString($Packet[($Offset + 1)..($Offset + $Length - 1)]))
+                $TlvType.PortId {
+                    $Subtype = $Packet[($Offset)]
+
+                    if ($SubType -in (1, 2, 5, 6, 7)) {
+                        $Hash.Add('Port', [System.Text.Encoding]::ASCII.GetString($Packet[($Offset + 1)..($Offset + $Length - 1)]))
+                    }
+
+                    if ($Subtype -eq 3) {
+                        $Hash.Add('Port', [PhysicalAddress]::new($Packet[($Offset + 1)..($Offset + $Length - 1)]))
+                    }
+
                     $Offset += $Length
                     break
                 }
 
-                4 {
+                $TlvType.PortDescription {
                     $Hash.Add('Description', [System.Text.Encoding]::ASCII.GetString($Packet[$Offset..($Offset + $Length - 1)]))
                     $Offset += $Length
                     break
                 }
 
-                5 {
+                $TlvType.SystemName {
                     $Hash.Add('Device', [System.Text.Encoding]::ASCII.GetString($Packet[$Offset..($Offset + $Length - 1)]))
                     $Offset += $Length
                     break
                 }
 
-                8 {
+                $TlvType.ManagementAddress {
                     $AddrLen = $Packet[($Offset)]
                     $Subtype = $Packet[($Offset + 1)]
 
@@ -541,11 +558,12 @@ function Parse-LLDPPacket {
                     {
                         $Hash.Add('IPAddress', ([System.Net.IPAddress][byte[]]$Packet[($Offset + 2)..($Offset + $AddrLen)]).IPAddressToString)
                     }
+
                     $Offset += $Length
                     break
                 }
 
-                127 {
+                $TlvType.OrganizationSpecific {
                     $OUI = [System.BitConverter]::ToString($Packet[($Offset)..($Offset + 2)])
 
                     if ($OUI -eq '00-12-BB') {
