@@ -1,5 +1,5 @@
 ﻿#region function Capture-CDPPacket
-function Capture-CDPPacket {
+function Get-CDPPacket {
 
 <#
 
@@ -64,6 +64,7 @@ function Capture-CDPPacket {
 #>
 
     [CmdletBinding()]
+    [Alias('Capture-CDPPacket')]
     param(
         [Parameter(Position=0,
             ValueFromPipeline=$true,
@@ -156,7 +157,7 @@ function Capture-CDPPacket {
 #endregion
 
 #region function Parse-CDPPacket
-function Parse-CDPPacket {
+function ConvertFrom-CDPPacket {
 
 <#
 
@@ -212,6 +213,7 @@ function Parse-CDPPacket {
 #>
 
     [CmdletBinding()]
+    [Alias('Parse-CDPPacket')]
     param(
         [Parameter(Position=0,
             Mandatory=$true,
@@ -259,7 +261,7 @@ function Parse-CDPPacket {
 #endregion
 
 #region function Capture-LLDPPacket
-function Capture-LLDPPacket {
+function Get-LLDPPacket {
 
 <#
 
@@ -328,6 +330,7 @@ function Capture-LLDPPacket {
 #>
 
     [CmdletBinding()]
+    [Alias('Capture-LLDPPacket')]
     param(
         [Parameter(Position=0,
             ValueFromPipeline=$true,
@@ -423,7 +426,7 @@ function Capture-LLDPPacket {
 #endregion
 
 #region function Parse-LLDPPacket
-function Parse-LLDPPacket {
+function ConvertFrom-LLDPPacket {
 
 <#
 
@@ -483,6 +486,7 @@ function Parse-LLDPPacket {
 #>
 
     [CmdletBinding()]
+    [Alias('Parse-LLDPPacket')]
     param(
         [Parameter(Position=0,
             Mandatory=$true,
