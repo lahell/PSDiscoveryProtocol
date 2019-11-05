@@ -1,33 +1,53 @@
-﻿#region function Capture-CDPPacket
-function Capture-CDPPacket {
+#region classes
+class DiscoveryProtocolPacket
+{
+    [string]$MachineName
+    [datetime]$TimeCreated
+    [int]$FragmentSize
+    [byte[]]$Fragment
+}
+#endregion
+
+#region function Invoke-DiscoveryProtocolCapture
+function Invoke-DiscoveryProtocolCapture {
 
 <#
 
 .SYNOPSIS
 
-    Capture CDP packets on local or remote computers
+    Capture CDP or LLDP packets on local or remote computers
 
 .DESCRIPTION
 
-    Capture CDP packets on local or remote computers. Cisco devices will by default send CDP announcements every 60 seconds.
-    This cmdlet will start a packet capture and save the captured packets in a temporary ETL file. Only the first CDP packet
-    in the ETL file will be returned.
+    Capture discovery protocol packets on local or remote computers. This function will start a packet capture and save the
+    captured packets in a temporary ETL file. Only the first discovery protocol packet in the ETL file will be returned.
+
+    Cisco devices will by default send CDP announcements every 60 seconds. Default interval for LLDP packets is 30 seconds.
 
     Requires elevation (Run as Administrator).
     WinRM and PowerShell remoting must be enabled on the target computer.
 
 .PARAMETER ComputerName
 
-    Specifies one or more computers on which to capture CDP packets. Defaults to $env:COMPUTERNAME.
+    Specifies one or more computers on which to capture packets. Defaults to $env:COMPUTERNAME.
 
 .PARAMETER Duration
 
-    Specifies the duration for which the CDP packets are captured, in seconds. Defaults to 62.
+    Specifies the duration for which the discovery protocol packets are captured, in seconds.
+
+    If Type is LLDP, Duration defaults to 32. If Type is CDP or omitted, Duration defaults to 62.
+
+.PARAMETER Type
+
+    Specifies what type of packet to capture, CDP or LLDP. If omitted, both types will be captured,
+    but only the first one will be returned.
+
+    If Type is LLDP, Duration defaults to 32. If Type is CDP or omitted, Duration defaults to 62.
 
 .EXAMPLE
 
-    PS> $Packet = Capture-CDPPacket
-    PS> Parse-CDPPacket -Packet $Packet
+    PS> $Packet = Invoke-DiscoveryProtocolCapture -Type CDP -Duration 60
+    PS> Get-DiscoveryProtocolCapture -Packet $Packet
 
     Port      : FastEthernet0/1
     Device    : SWITCH1.domain.example
@@ -37,7 +57,7 @@ function Capture-CDPPacket {
 
 .EXAMPLE
 
-    PS> Capture-CDPPacket -Computer COMPUTER1 | Parse-CDPPacket
+    PS> Invoke-DiscoveryProtocolCapture -Computer COMPUTER1 | Get-DiscoveryProtocolCapture
 
     Port      : FastEthernet0/1
     Device    : SWITCH1.domain.example
@@ -47,7 +67,7 @@ function Capture-CDPPacket {
 
 .EXAMPLE
 
-    PS> 'COMPUTER1', 'COMPUTER2' | Capture-CDPPacket | Parse-CDPPacket
+    PS> 'COMPUTER1', 'COMPUTER2' | Invoke-DiscoveryProtocolCapture | Get-DiscoveryProtocolCapture
 
     Port      : FastEthernet0/1
     Device    : SWITCH1.domain.example
@@ -64,6 +84,7 @@ function Capture-CDPPacket {
 #>
 
     [CmdletBinding()]
+    [Alias('Capture-CDPPacket', 'Capture-LLDPPacket')]
     param(
         [Parameter(Position=0,
             ValueFromPipeline=$true,
@@ -72,14 +93,25 @@ function Capture-CDPPacket {
         [String[]]$ComputerName = $env:COMPUTERNAME,
 
         [Parameter(Position=1)]
-        [Int16]$Duration = 62
+        [Int16]$Duration = $(if ($Type -eq 'LLDP') { 32 } else { 62 }),
+
+        [Parameter(Position=2)]
+        [ValidateSet('CDP', 'LLDP')]
+        [String]$Type
     )
 
     begin {
         $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
         $Principal = New-Object Security.Principal.WindowsPrincipal $Identity
         if (-not $Principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
-            throw 'Capture-CDPPacket requires elevation. Please run PowerShell as administrator.'
+            throw 'Invoke-DiscoveryProtocolCapture requires elevation. Please run PowerShell as administrator.'
+        }
+
+        if ($MyInvocation.InvocationName -ne $MyInvocation.MyCommand) {
+            if ($MyInvocation.InvocationName -eq 'Capture-CDPPacket') { $Type = 'CDP' }
+            if ($MyInvocation.InvocationName -eq 'Capture-LLDPPacket') { $Type = 'LLDP' }
+            $Warning = '{0} has been deprecated, please use {1}' -f $MyInvocation.InvocationName, $MyInvocation.MyCommand
+            Write-Warning $Warning
         }
     }
 
@@ -101,47 +133,90 @@ function Capture-CDPPacket {
 
             $Adapter = Get-NetAdapter -Physical -CimSession $CimSession |
                 Where-Object {$_.Status -eq 'Up' -and $_.InterfaceType -eq 6} |
-                Select-Object -First 1 -ExpandProperty Name
+                Select-Object -First 1 Name, MacAddress
+
+            $MACAddress = [PhysicalAddress]::Parse($Adapter.MacAddress).ToString()
 
             if ($Adapter) {
-                $Session = New-NetEventSession -Name CDP -LocalFilePath $ETLFile.FullName -CaptureMode SaveToFile -CimSession $CimSession
+                $SessionName = 'Capture-{0}' -f (Get-Date).ToString('s')
+                $Session = New-NetEventSession -Name $SessionName -LocalFilePath $ETLFile.FullName -CaptureMode SaveToFile -CimSession $CimSession
 
-                Add-NetEventPacketCaptureProvider -SessionName CDP -LinkLayerAddress '01-00-0c-cc-cc-cc' -TruncationLength 1024 -CaptureType BothPhysicalAndSwitch -CimSession $CimSession | Out-Null
-                Add-NetEventNetworkAdapter -Name $Adapter -PromiscuousMode $True -CimSession $CimSession | Out-Null
+                $LinkLayerAddress = switch ($Type) {
+                    'CDP'   { '01-00-0c-cc-cc-cc' }
+                    'LLDP'  { '01-80-c2-00-00-0e', '01-80-c2-00-00-03', '01-80-c2-00-00-00' }
+                    Default { '01-00-0c-cc-cc-cc', '01-80-c2-00-00-0e', '01-80-c2-00-00-03', '01-80-c2-00-00-00' }
+                }
 
-                Start-NetEventSession -Name CDP -CimSession $CimSession
+                $PacketCaptureParams = @{
+                    SessionName      = $SessionName
+                    TruncationLength = 0
+                    CaptureType      = 'Physical'
+                    CimSession       = $CimSession
+                    LinkLayerAddress = $LinkLayerAddress
+                }
+
+                Add-NetEventPacketCaptureProvider @PacketCaptureParams | Out-Null
+                Add-NetEventNetworkAdapter -Name $Adapter.Name -PromiscuousMode $True -CimSession $CimSession | Out-Null
+
+                Start-NetEventSession -Name $SessionName -CimSession $CimSession
 
                 $Seconds = $Duration
                 $End = (Get-Date).AddSeconds($Seconds)
                 while ($End -gt (Get-Date)) {
                     $SecondsLeft = $End.Subtract((Get-Date)).TotalSeconds
                     $Percent = ($Seconds - $SecondsLeft) / $Seconds * 100
-                    Write-Progress -Activity "CDP Packet Capture" -Status "Capturing on $Computer..." -SecondsRemaining $SecondsLeft -PercentComplete $Percent
+                    Write-Progress -Activity "Discovery Protocol Packet Capture" -Status "Capturing on $Computer..." -SecondsRemaining $SecondsLeft -PercentComplete $Percent
                     [System.Threading.Thread]::Sleep(500)
                 }
 
-                Stop-NetEventSession -Name CDP -CimSession $CimSession
+                Stop-NetEventSession -Name $SessionName -CimSession $CimSession
 
-                $Log = Invoke-Command -ComputerName $Computer -ScriptBlock {
-                    Get-WinEvent -Path $args[0] -Oldest |
-                        Where-Object {
-                            $_.Id -eq 1001 -and
-                            [UInt16]0x2000 -eq [BitConverter]::ToUInt16($_.Properties[3].Value[21..20], 0)
-                        } |
-                        Select-Object -Last 1 -ExpandProperty Properties
+                $Events = Invoke-Command -ComputerName $Computer -ScriptBlock {
+                    $Events = Get-WinEvent -Path $args[0] -Oldest -FilterXPath "*[System[EventID=1001]]"
+
+                    [string[]]$XpathQueries = @(
+                        "Event/EventData/Data[@Name='FragmentSize']"
+                        "Event/EventData/Data[@Name='Fragment']"
+                    )
+
+                    $PropertySelector = [System.Diagnostics.Eventing.Reader.EventLogPropertySelector]::new($XpathQueries)
+
+                    foreach ($Event in $Events) {
+                        $EventData = $Event | Select-Object MachineName, TimeCreated
+                        $EventData | Add-Member -NotePropertyName FragmentSize -NotePropertyValue $null
+                        $EventData | Add-Member -NotePropertyName Fragment -NotePropertyValue $null
+                        $EventData.FragmentSize, $EventData.Fragment = $Event.GetPropertyValues($PropertySelector)
+                        $EventData
+                    }
                 } -ArgumentList $Session.LocalFilePath
 
-                Remove-NetEventSession -Name CDP -CimSession $CimSession
-                Start-Sleep -Seconds 2
+                $FoundPacket = $null
+
+                foreach ($Event in $Events) {
+                    $Packet = [PSCustomObject] @{
+                        PSTypeName   = 'DiscoveryProtocolPacket'
+                        MachineName  = $Event.MachineName
+                        TimeCreated  = $Event.TimeCreated
+                        FragmentSize = $Event.FragmentSize
+                        Fragment     = $Event.Fragment
+                    }
+
+                    if ($Packet.IsDiscoveryProtocolPacket -and $Packet.SourceAddress -ne $MACAddress) {
+                        $FoundPacket = $Packet
+                        break
+                    }
+                }
+
+                Remove-NetEventSession -Name $SessionName -CimSession $CimSession
+
                 Invoke-Command -ComputerName $Computer -ScriptBlock {
                     Remove-Item -Path $args[0] -Force
                 } -ArgumentList $ETLFile.FullName
 
-                if ($Log) {
-                    $Packet = $Log[3].Value
-                    ,$Packet
+                if ($FoundPacket) {
+                    $FoundPacket
                 } else {
-                    Write-Warning "No CDP packets captured on $Computer in $Seconds seconds."
+                    Write-Warning "No discovery protocol packets captured on $Computer in $Seconds seconds."
                     return
                 }
             } else {
@@ -155,59 +230,139 @@ function Capture-CDPPacket {
 }
 #endregion
 
-#region function Parse-CDPPacket
-function Parse-CDPPacket {
+#region function Get-DiscoveryProtocolData
+function Get-DiscoveryProtocolData {
 
 <#
 
 .SYNOPSIS
 
-    Parse CDP packet returned from Capture-CDPPacket.
+    Parse CDP or LLDP packets captured by Invoke-DiscoveryProtocolCapture
 
 .DESCRIPTION
 
-    Parse CDP packet to get port, device, model, ipaddress and vlan.
+    Gets computername, type and packet details from a DiscoveryProtocolPacket.
+
+    Calls ConvertFrom-CDPPacket or ConvertFrom-LLDPPacket to extract packet details
+    from a byte array.
 
 .PARAMETER Packet
 
-    Array of one or more byte arrays from Capture-CDPPacket.
+    Specifies an object of type DiscoveryProtocolPacket.
 
 .EXAMPLE
 
-    PS> $Packet = Capture-CDPPacket
-    PS> Parse-CDPPacket -Packet $Packet
+    PS> $Packet = Invoke-DiscoveryProtocolCapture
+    PS> Get-DiscoveryProtocolCapture -Packet $Packet
 
     Port      : FastEthernet0/1
     Device    : SWITCH1.domain.example
     Model     : cisco WS-C2960-48TT-L
     IPAddress : 192.0.2.10
     VLAN      : 10
+    Computer  : COMPUTER1
+    Type      : CDP
 
 .EXAMPLE
 
-    PS> Capture-CDPPacket -Computer COMPUTER1 | Parse-CDPPacket
+    PS> Invoke-DiscoveryProtocolCapture -Computer COMPUTER1 | Get-DiscoveryProtocolCapture
 
     Port      : FastEthernet0/1
     Device    : SWITCH1.domain.example
     Model     : cisco WS-C2960-48TT-L
     IPAddress : 192.0.2.10
     VLAN      : 10
+    Computer  : COMPUTER1
+    Type      : CDP
 
 .EXAMPLE
 
-    PS> 'COMPUTER1', 'COMPUTER2' | Capture-CDPPacket | Parse-CDPPacket
+    PS> 'COMPUTER1', 'COMPUTER2' | Invoke-DiscoveryProtocolCapture | Get-DiscoveryProtocolCapture
 
     Port      : FastEthernet0/1
     Device    : SWITCH1.domain.example
     Model     : cisco WS-C2960-48TT-L
     IPAddress : 192.0.2.10
     VLAN      : 10
+    Computer  : COMPUTER1
+    Type      : CDP
 
     Port      : FastEthernet0/2
     Device    : SWITCH1.domain.example
     Model     : cisco WS-C2960-48TT-L
     IPAddress : 192.0.2.10
     VLAN      : 20
+    Computer  : COMPUTER2
+    Type      : CDP
+
+#>
+
+    [CmdletBinding()]
+    [Alias('Parse-CDPPacket', 'Parse-LLDPPacket')]
+    param(
+        [Parameter(Position=0,
+            Mandatory=$true,
+            ValueFromPipeline=$true,
+            ValueFromPipelineByPropertyName=$true)]
+        [DiscoveryProtocolPacket[]]
+        $Packet
+    )
+
+    begin {
+        if ($MyInvocation.InvocationName -ne $MyInvocation.MyCommand) {
+            $Warning = '{0} has been deprecated, please use {1}' -f $MyInvocation.InvocationName, $MyInvocation.MyCommand
+            Write-Warning $Warning
+        }
+    }
+
+    process {
+        foreach ($item in $Packet) {
+            switch ($item.DiscoveryProtocolType) {
+                'CDP'   { $PacketData = ConvertFrom-CDPPacket -Packet $item.Fragment }
+                'LLDP'  { $PacketData = ConvertFrom-LLDPPacket -Packet $item.Fragment }
+                Default { throw 'No valid CDP or LLDP found in $Packet' }
+            }
+
+            $PacketData | Add-Member -NotePropertyName Computer -NotePropertyValue $item.MachineName
+            $PacketData | Add-Member -NotePropertyName Type -NotePropertyValue $item.DiscoveryProtocolType
+            $PacketData
+        }
+    }
+
+    end {}
+}
+#endregion
+
+#region function ConvertFrom-CDPPacket
+function ConvertFrom-CDPPacket {
+
+<#
+
+.SYNOPSIS
+
+    Parse CDP packet.
+
+.DESCRIPTION
+
+    Parse CDP packet to get port, device, model, ipaddress and vlan.
+
+    This function is used by Get-DiscoveryProtocolData to parse the
+    Fragment property of a DiscoveryProtocolPacket object.
+
+.PARAMETER Packet
+
+    Array of one or more byte arrays.
+
+.EXAMPLE
+
+    PS> $Packet = Invoke-DiscoveryProtocolCapture -Type CDP
+    PS> ConvertFrom-CDPPacket -Packet $Packet.Fragment
+
+    Port      : FastEthernet0/1
+    Device    : SWITCH1.domain.example
+    Model     : cisco WS-C2960-48TT-L
+    IPAddress : 192.0.2.10
+    VLAN      : 10
 
 #>
 
@@ -258,178 +413,14 @@ function Parse-CDPPacket {
 }
 #endregion
 
-#region function Capture-LLDPPacket
-function Capture-LLDPPacket {
+#region function ConvertFrom-LLDPPacket
+function ConvertFrom-LLDPPacket {
 
 <#
 
 .SYNOPSIS
 
-    Capture LLDP packets on local or remote computers
-
-.DESCRIPTION
-
-    Capture LLDP packets on local or remote computers.
-    This cmdlet will start a packet capture and save the captured packets in a temporary ETL file.
-    Only the first LLDP packet in the ETL file will be returned.
-
-    Requires elevation (Run as Administrator).
-    WinRM and PowerShell remoting must be enabled on the target computer.
-
-.PARAMETER ComputerName
-
-    Specifies one or more computers on which to capture LLDP packets. Defaults to $env:COMPUTERNAME.
-
-.PARAMETER Duration
-
-    Specifies the duration for which the LLDP packets are captured, in seconds. Defaults to 32.
-
-.EXAMPLE
-
-    PS> $Packet = Capture-LLDPPacket
-    PS> Parse-LLDPPacket -Packet $Packet
-
-    Model       : WS-C2960-48TT-L
-    Description : HR Workstation
-    VLAN        : 10
-    Port        : Fa0/1
-    Device      : SWITCH1.domain.example
-    IPAddress   : 192.0.2.10
-
-.EXAMPLE
-
-    PS> Capture-LLDPPacket -Computer COMPUTER1 | Parse-LLDPPacket
-
-    Model       : WS-C2960-48TT-L
-    Description : HR Workstation
-    VLAN        : 10
-    Port        : Fa0/1
-    Device      : SWITCH1.domain.example
-    IPAddress   : 192.0.2.10
-
-.EXAMPLE
-
-    PS> 'COMPUTER1', 'COMPUTER2' | Capture-LLDPPacket | Parse-LLDPPacket
-
-    Model       : WS-C2960-48TT-L
-    Description : HR Workstation
-    VLAN        : 10
-    Port        : Fa0/1
-    Device      : SWITCH1.domain.example
-    IPAddress   : 192.0.2.10
-
-    Model       : WS-C2960-48TT-L
-    Description : IT Workstation
-    VLAN        : 20
-    Port        : Fa0/2
-    Device      : SWITCH1.domain.example
-    IPAddress   : 192.0.2.10
-
-#>
-
-    [CmdletBinding()]
-    param(
-        [Parameter(Position=0,
-            ValueFromPipeline=$true,
-            ValueFromPipelineByPropertyName=$true)]
-        [Alias('CN', 'Computer')]
-        [String[]]$ComputerName = $env:COMPUTERNAME,
-
-        [Parameter(Position=1)]
-        [Int16]$Duration = 32
-    )
-
-    begin {
-        $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-        $Principal = New-Object Security.Principal.WindowsPrincipal $Identity
-        if (-not $Principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
-            throw 'Capture-LLDPPacket requires elevation. Please run PowerShell as administrator.'
-        }
-    }
-
-    process {
-
-        foreach ($Computer in $ComputerName) {
-
-            try {
-                $CimSession = New-CimSession -ComputerName $Computer -ErrorAction Stop
-            } catch {
-                Write-Warning "Unable to create CimSession. Please make sure WinRM and PSRemoting is enabled on $Computer."
-                continue
-            }
-
-            $ETLFile = Invoke-Command -ComputerName $Computer -ScriptBlock {
-                $TempFile = New-TemporaryFile
-                Rename-Item -Path $TempFile.FullName -NewName $TempFile.FullName.Replace('.tmp', '.etl') -PassThru
-            }
-
-            $Adapter = Get-NetAdapter -Physical -CimSession $CimSession |
-                Where-Object {$_.Status -eq 'Up' -and $_.InterfaceType -eq 6} |
-                Select-Object -First 1 Name, MacAddress
-
-            $MACAddress = [PhysicalAddress]::Parse($Adapter.MacAddress).ToString()
-
-            if ($Adapter) {
-                $Session = New-NetEventSession -Name LLDP -LocalFilePath $ETLFile.FullName -CaptureMode SaveToFile -CimSession $CimSession
-
-                Add-NetEventPacketCaptureProvider -SessionName LLDP -EtherType 0x88CC -TruncationLength 1024 -CaptureType BothPhysicalAndSwitch -CimSession $CimSession | Out-Null
-                Add-NetEventNetworkAdapter -Name $Adapter.Name -PromiscuousMode $True -CimSession $CimSession | Out-Null
-
-                Start-NetEventSession -Name LLDP -CimSession $CimSession
-
-                $Seconds = $Duration
-                $End = (Get-Date).AddSeconds($Seconds)
-                while ($End -gt (Get-Date)) {
-                    $SecondsLeft = $End.Subtract((Get-Date)).TotalSeconds
-                    $Percent = ($Seconds - $SecondsLeft) / $Seconds * 100
-                    Write-Progress -Activity "LLDP Packet Capture" -Status "Capturing on $Computer..." -SecondsRemaining $SecondsLeft -PercentComplete $Percent
-                    [System.Threading.Thread]::Sleep(500)
-                }
-
-                Stop-NetEventSession -Name LLDP -CimSession $CimSession
-
-                $Log = Invoke-Command -ComputerName $Computer -ScriptBlock {
-                    Get-WinEvent -Path $args[0] -Oldest |
-                        Where-Object {
-                            $_.Id -eq 1001 -and
-                            [UInt16]0x88CC -eq [BitConverter]::ToUInt16($_.Properties[3].Value[13..12], 0) -and
-                            $MACAddress -ne [PhysicalAddress]::new($_.Properties[3].Value[6..11]).ToString()
-                        } |
-                        Select-Object -Last 1 -ExpandProperty Properties
-                } -ArgumentList $Session.LocalFilePath
-
-                Remove-NetEventSession -Name LLDP -CimSession $CimSession
-                Start-Sleep -Seconds 2
-                Invoke-Command -ComputerName $Computer -ScriptBlock {
-                    Remove-Item -Path $args[0] -Force
-                } -ArgumentList $ETLFile.FullName
-
-                if ($Log) {
-                    $Packet = $Log[3].Value
-                    ,$Packet
-                } else {
-                    Write-Warning "No LLDP packets captured on $Computer in $Seconds seconds."
-                    return
-                }
-            } else {
-                Write-Warning "Unable to find a connected wired adapter on $Computer."
-                return
-            }
-        }
-    }
-
-    end {}
-}
-#endregion
-
-#region function Parse-LLDPPacket
-function Parse-LLDPPacket {
-
-<#
-
-.SYNOPSIS
-
-    Parse LLDP packet returned from Capture-LLDPPacket.
+    Parse LLDP packet.
 
 .DESCRIPTION
 
@@ -437,46 +428,20 @@ function Parse-LLDPPacket {
 
 .PARAMETER Packet
 
-    Array of one or more byte arrays from Capture-LLDPPacket.
+    Array of one or more byte arrays.
+
+    This function is used by Get-DiscoveryProtocolData to parse the
+    Fragment property of a DiscoveryProtocolPacket object.
 
 .EXAMPLE
 
-    PS> $Packet = Capture-LLDPPacket
-    PS> Parse-LLDPPacket -Packet $Packet
+    PS> $Packet = Invoke-DiscoveryProtocolCapture -Type LLDP
+    PS> ConvertFrom-LLDPPacket -Packet $Packet.Fragment
 
     Model       : WS-C2960-48TT-L
     Description : HR Workstation
     VLAN        : 10
     Port        : Fa0/1
-    Device      : SWITCH1.domain.example
-    IPAddress   : 192.0.2.10
-
-.EXAMPLE
-
-    PS> Capture-LLDPPacket -Computer COMPUTER1 | Parse-LLDPPacket
-
-    Model       : WS-C2960-48TT-L
-    Description : HR Workstation
-    VLAN        : 10
-    Port        : Fa0/1
-    Device      : SWITCH1.domain.example
-    IPAddress   : 192.0.2.10
-
-.EXAMPLE
-
-    PS> 'COMPUTER1', 'COMPUTER2' | Capture-LLDPPacket | Parse-LLDPPacket
-
-    Model       : WS-C2960-48TT-L
-    Description : HR Workstation
-    VLAN        : 10
-    Port        : Fa0/1
-    Device      : SWITCH1.domain.example
-    IPAddress   : 192.0.2.10
-
-    Model       : WS-C2960-48TT-L
-    Description : IT Workstation
-    VLAN        : 20
-    Port        : Fa0/2
     Device      : SWITCH1.domain.example
     IPAddress   : 192.0.2.10
 
@@ -608,5 +573,129 @@ function Parse-LLDPPacket {
     }
 
     end {}
+}
+#endregion
+
+#region function Export-Pcap
+function Export-Pcap {
+
+<#
+
+.SYNOPSIS
+
+    Export packets to pcap
+
+.DESCRIPTION
+
+    Export packets, captured using Invoke-DiscoveryProtocolCapture, to pcap format.
+
+.PARAMETER Packet
+
+    Specifies one or more objects of type DiscoveryProtocolPacket.
+
+.PARAMETER Path
+
+    Relative or absolute path to pcap file.
+
+.PARAMETER Invoke
+
+    If Invoke is set, exported file is opened in the program associated with pcap files.
+
+.EXAMPLE
+
+    Export captured packet to C:\Windows\Temp\captures.pcap and open file in
+    the program associated with pcap files.
+
+    PS> $Packet = Invoke-DiscoveryProtocolCapture
+    PS> Export-Pcap -Packet $Packet -Path C:\Windows\Temp\captures.pcap -Invoke
+
+.EXAMPLE
+
+    Export captured packets to captures.pcap in current directory. Export-Pcap supports input from pipeline.
+
+    PS> 'COMPUTER1', 'COMPUTER2' | Invoke-DiscoveryProtocolCapture | Export-Pcap -Packet $Packet -Path captures.pcap
+
+#>
+
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true,
+            ValueFromPipeline=$true,
+            ValueFromPipelineByPropertyName=$true)]
+        [DiscoveryProtocolPacket[]]$Packet,
+
+        [Parameter(Mandatory=$true)]
+        [ValidateScript({
+            if ([System.IO.Path]::IsPathRooted($_)) {
+                $AbsolutePath = $_
+            } else {
+                $AbsolutePath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($_)
+            }
+            if (-not(Test-Path (Split-Path $AbsolutePath -Parent))) {
+                throw "Folder does not exist"
+            }
+            if ($_ -notmatch '\.pcap$') {
+                throw "Extension must be pcap"
+            }
+            return $true
+        })]
+        [System.IO.FileInfo]$Path,
+
+        [Parameter(Mandatory=$false)]
+        [switch]$Invoke
+    )
+
+    begin {
+        [uint32]$magicNumber = '0xa1b2c3d4'
+        [uint16]$versionMajor = 2
+        [uint16]$versionMinor = 4
+        [int32] $thisZone = 0
+        [uint32]$sigFigs = 0
+        [uint32]$snapLen = 65536
+        [uint32]$network = 1
+
+        $stream = New-Object System.IO.MemoryStream
+        $writer = New-Object System.IO.BinaryWriter $stream
+
+        $writer.Write($magicNumber)
+        $writer.Write($versionMajor)
+        $writer.Write($versionMinor)
+        $writer.Write($thisZone)
+        $writer.Write($sigFigs)
+        $writer.Write($snapLen)
+        $writer.Write($network)
+    }
+
+    process {
+        foreach ($item in $Packet) {
+            [uint32]$tsSec = ([DateTimeOffset]$item.TimeCreated).ToUnixTimeSeconds()
+            [uint32]$tsUsec = $item.TimeCreated.Millisecond
+            [uint32]$inclLen = $item.FragmentSize
+            [uint32]$origLen = $inclLen
+
+            $writer.Write($tsSec)
+            $writer.Write($tsUsec)
+            $writer.Write($inclLen)
+            $writer.Write($origLen)
+            $writer.Write($item.Fragment)
+        }
+    }
+
+    end {
+        $bytes = $stream.ToArray()
+
+        $stream.Dispose()
+        $writer.Dispose()
+
+        if (-not([System.IO.Path]::IsPathRooted($Path))) {
+            $Path = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+        }
+
+        [System.IO.File]::WriteAllBytes($Path, $bytes)
+
+        if ($Invoke) {
+            Invoke-Item -Path $Path
+        }
+    }
 }
 #endregion
