@@ -51,3 +51,9 @@ VLAN      : 20
 Computer  : COMPUTER2.domain.example
 Type      : CDP
 ```
+
+### Capture on remote computers and export to pcap
+
+```PowerShell
+'COMPUTER1', 'COMPUTER2' | Invoke-DiscoveryProtocolCapture | Export-Pcap -Path packets.pcap
+```
