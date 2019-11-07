@@ -47,39 +47,47 @@ function Invoke-DiscoveryProtocolCapture {
 .EXAMPLE
 
     PS> $Packet = Invoke-DiscoveryProtocolCapture -Type CDP -Duration 60
-    PS> Get-DiscoveryProtocolCapture -Packet $Packet
+    PS> Get-DiscoveryProtocolData -Packet $Packet
 
     Port      : FastEthernet0/1
     Device    : SWITCH1.domain.example
     Model     : cisco WS-C2960-48TT-L
     IPAddress : 192.0.2.10
     VLAN      : 10
+    Computer  : COMPUTER1
+    Type      : CDP
 
 .EXAMPLE
 
-    PS> Invoke-DiscoveryProtocolCapture -Computer COMPUTER1 | Get-DiscoveryProtocolCapture
+    PS> Invoke-DiscoveryProtocolCapture -Computer COMPUTER1 | Get-DiscoveryProtocolData
 
     Port      : FastEthernet0/1
     Device    : SWITCH1.domain.example
     Model     : cisco WS-C2960-48TT-L
     IPAddress : 192.0.2.10
     VLAN      : 10
+    Computer  : COMPUTER1
+    Type      : CDP
 
 .EXAMPLE
 
-    PS> 'COMPUTER1', 'COMPUTER2' | Invoke-DiscoveryProtocolCapture | Get-DiscoveryProtocolCapture
+    PS> 'COMPUTER1', 'COMPUTER2' | Invoke-DiscoveryProtocolCapture | Get-DiscoveryProtocolData
 
     Port      : FastEthernet0/1
     Device    : SWITCH1.domain.example
     Model     : cisco WS-C2960-48TT-L
     IPAddress : 192.0.2.10
     VLAN      : 10
+    Computer  : COMPUTER1
+    Type      : CDP
 
     Port      : FastEthernet0/2
     Device    : SWITCH1.domain.example
     Model     : cisco WS-C2960-48TT-L
     IPAddress : 192.0.2.10
     VLAN      : 20
+    Computer  : COMPUTER2
+    Type      : CDP
 
 #>
 
@@ -253,7 +261,7 @@ function Get-DiscoveryProtocolData {
 .EXAMPLE
 
     PS> $Packet = Invoke-DiscoveryProtocolCapture
-    PS> Get-DiscoveryProtocolCapture -Packet $Packet
+    PS> Get-DiscoveryProtocolData -Packet $Packet
 
     Port      : FastEthernet0/1
     Device    : SWITCH1.domain.example
@@ -265,7 +273,7 @@ function Get-DiscoveryProtocolData {
 
 .EXAMPLE
 
-    PS> Invoke-DiscoveryProtocolCapture -Computer COMPUTER1 | Get-DiscoveryProtocolCapture
+    PS> Invoke-DiscoveryProtocolCapture -Computer COMPUTER1 | Get-DiscoveryProtocolData
 
     Port      : FastEthernet0/1
     Device    : SWITCH1.domain.example
@@ -277,7 +285,7 @@ function Get-DiscoveryProtocolData {
 
 .EXAMPLE
 
-    PS> 'COMPUTER1', 'COMPUTER2' | Invoke-DiscoveryProtocolCapture | Get-DiscoveryProtocolCapture
+    PS> 'COMPUTER1', 'COMPUTER2' | Invoke-DiscoveryProtocolCapture | Get-DiscoveryProtocolData
 
     Port      : FastEthernet0/1
     Device    : SWITCH1.domain.example
