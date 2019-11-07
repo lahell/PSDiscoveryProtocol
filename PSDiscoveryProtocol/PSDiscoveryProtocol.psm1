@@ -621,7 +621,7 @@ function Export-Pcap {
 
     Export captured packets to captures.pcap in current directory. Export-Pcap supports input from pipeline.
 
-    PS> 'COMPUTER1', 'COMPUTER2' | Invoke-DiscoveryProtocolCapture | Export-Pcap -Packet $Packet -Path captures.pcap
+    PS> 'COMPUTER1', 'COMPUTER2' | Invoke-DiscoveryProtocolCapture | Export-Pcap -Path captures.pcap
 
 #>
 
