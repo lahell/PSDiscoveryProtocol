@@ -59,7 +59,7 @@ function Invoke-DiscoveryProtocolCapture {
 
 .EXAMPLE
 
-    PS> Invoke-DiscoveryProtocolCapture -Computer COMPUTER1 | Get-DiscoveryProtocolData
+    PS C:\> Invoke-DiscoveryProtocolCapture -Computer COMPUTER1 | Get-DiscoveryProtocolData
 
     Port      : FastEthernet0/1
     Device    : SWITCH1.domain.example
@@ -71,7 +71,7 @@ function Invoke-DiscoveryProtocolCapture {
 
 .EXAMPLE
 
-    PS> 'COMPUTER1', 'COMPUTER2' | Invoke-DiscoveryProtocolCapture | Get-DiscoveryProtocolData
+    PS C:\> 'COMPUTER1', 'COMPUTER2' | Invoke-DiscoveryProtocolCapture | Get-DiscoveryProtocolData
 
     Port      : FastEthernet0/1
     Device    : SWITCH1.domain.example
@@ -260,8 +260,8 @@ function Get-DiscoveryProtocolData {
 
 .EXAMPLE
 
-    PS> $Packet = Invoke-DiscoveryProtocolCapture
-    PS> Get-DiscoveryProtocolData -Packet $Packet
+    PS C:\> $Packet = Invoke-DiscoveryProtocolCapture
+    PS C:\> Get-DiscoveryProtocolData -Packet $Packet
 
     Port      : FastEthernet0/1
     Device    : SWITCH1.domain.example
@@ -273,7 +273,7 @@ function Get-DiscoveryProtocolData {
 
 .EXAMPLE
 
-    PS> Invoke-DiscoveryProtocolCapture -Computer COMPUTER1 | Get-DiscoveryProtocolData
+    PS C:\> Invoke-DiscoveryProtocolCapture -Computer COMPUTER1 | Get-DiscoveryProtocolData
 
     Port      : FastEthernet0/1
     Device    : SWITCH1.domain.example
@@ -285,7 +285,7 @@ function Get-DiscoveryProtocolData {
 
 .EXAMPLE
 
-    PS> 'COMPUTER1', 'COMPUTER2' | Invoke-DiscoveryProtocolCapture | Get-DiscoveryProtocolData
+    PS C:\> 'COMPUTER1', 'COMPUTER2' | Invoke-DiscoveryProtocolCapture | Get-DiscoveryProtocolData
 
     Port      : FastEthernet0/1
     Device    : SWITCH1.domain.example
@@ -359,12 +359,15 @@ function ConvertFrom-CDPPacket {
 
 .PARAMETER Packet
 
-    Array of one or more byte arrays.
+    Raw CDP packet as byte array.
+
+    This function is used by Get-DiscoveryProtocolData to parse the
+    Fragment property of a DiscoveryProtocolPacket object.
 
 .EXAMPLE
 
-    PS> $Packet = Invoke-DiscoveryProtocolCapture -Type CDP
-    PS> ConvertFrom-CDPPacket -Packet $Packet.Fragment
+    PS C:\> $Packet = Invoke-DiscoveryProtocolCapture -Type CDP
+    PS C:\> ConvertFrom-CDPPacket -Packet $Packet.Fragment
 
     Port      : FastEthernet0/1
     Device    : SWITCH1.domain.example
@@ -377,10 +380,8 @@ function ConvertFrom-CDPPacket {
     [CmdletBinding()]
     param(
         [Parameter(Position=0,
-            Mandatory=$true,
-            ValueFromPipeline=$true,
-            ValueFromPipelineByPropertyName=$true)]
-        [object[]]$Packet
+            Mandatory=$true)]
+        [byte[]]$Packet
     )
 
     begin {}
@@ -436,15 +437,15 @@ function ConvertFrom-LLDPPacket {
 
 .PARAMETER Packet
 
-    Array of one or more byte arrays.
+    Raw LLDP packet as byte array.
 
     This function is used by Get-DiscoveryProtocolData to parse the
     Fragment property of a DiscoveryProtocolPacket object.
 
 .EXAMPLE
 
-    PS> $Packet = Invoke-DiscoveryProtocolCapture -Type LLDP
-    PS> ConvertFrom-LLDPPacket -Packet $Packet.Fragment
+    PS C:\> $Packet = Invoke-DiscoveryProtocolCapture -Type LLDP
+    PS C:\> ConvertFrom-LLDPPacket -Packet $Packet.Fragment
 
     Model       : WS-C2960-48TT-L
     Description : HR Workstation
@@ -458,10 +459,8 @@ function ConvertFrom-LLDPPacket {
     [CmdletBinding()]
     param(
         [Parameter(Position=0,
-            Mandatory=$true,
-            ValueFromPipeline=$true,
-            ValueFromPipelineByPropertyName=$true)]
-        [object[]]$Packet
+            Mandatory=$true)]
+        [byte[]]$Packet
     )
 
     begin {
@@ -614,14 +613,14 @@ function Export-Pcap {
     Export captured packet to C:\Windows\Temp\captures.pcap and open file in
     the program associated with pcap files.
 
-    PS> $Packet = Invoke-DiscoveryProtocolCapture
-    PS> Export-Pcap -Packet $Packet -Path C:\Windows\Temp\captures.pcap -Invoke
+    PS C:\> $Packet = Invoke-DiscoveryProtocolCapture
+    PS C:\> Export-Pcap -Packet $Packet -Path C:\Windows\Temp\captures.pcap -Invoke
 
 .EXAMPLE
 
     Export captured packets to captures.pcap in current directory. Export-Pcap supports input from pipeline.
 
-    PS> 'COMPUTER1', 'COMPUTER2' | Invoke-DiscoveryProtocolCapture | Export-Pcap -Path captures.pcap
+    PS C:\> 'COMPUTER1', 'COMPUTER2' | Invoke-DiscoveryProtocolCapture | Export-Pcap -Path captures.pcap
 
 #>
 
