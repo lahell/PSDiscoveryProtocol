@@ -79,7 +79,7 @@ By leveraging the new `-Parallel` parameter on `ForEach-Object` we can capture s
 
 ```PowerShell
 #Requires -Version 7
-$Packets = 'COMPUTER1', 'COMPUTER2', 'COMPUTER3' | ForEach-Object -Parallel {
+'COMPUTER1', 'COMPUTER2', 'COMPUTER3' | ForEach-Object -Parallel {
     Invoke-DiscoveryProtocolCapture -ComputerName $_ | Get-DiscoveryProtocolData
 }
 ```
