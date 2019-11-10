@@ -46,8 +46,8 @@ function Invoke-DiscoveryProtocolCapture {
 
 .EXAMPLE
 
-    PS> $Packet = Invoke-DiscoveryProtocolCapture -Type CDP -Duration 60
-    PS> Get-DiscoveryProtocolData -Packet $Packet
+    PS C:\> $Packet = Invoke-DiscoveryProtocolCapture -Type CDP -Duration 60
+    PS C:\> Get-DiscoveryProtocolData -Packet $Packet
 
     Port      : FastEthernet0/1
     Device    : SWITCH1.domain.example
@@ -610,17 +610,17 @@ function Export-Pcap {
 
 .EXAMPLE
 
-    Export captured packet to C:\Windows\Temp\captures.pcap and open file in
-    the program associated with pcap files.
-
     PS C:\> $Packet = Invoke-DiscoveryProtocolCapture
     PS C:\> Export-Pcap -Packet $Packet -Path C:\Windows\Temp\captures.pcap -Invoke
 
+    Export captured packet to C:\Windows\Temp\captures.pcap and open file in
+    the program associated with pcap files.
+
 .EXAMPLE
 
-    Export captured packets to captures.pcap in current directory. Export-Pcap supports input from pipeline.
-
     PS C:\> 'COMPUTER1', 'COMPUTER2' | Invoke-DiscoveryProtocolCapture | Export-Pcap -Path captures.pcap
+
+    Export captured packets to captures.pcap in current directory. Export-Pcap supports input from pipeline.
 
 #>
 
