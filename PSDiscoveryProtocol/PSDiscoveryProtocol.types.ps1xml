@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Types>
+    <Type>
+        <Name>DiscoveryProtocolPacket</Name>
+        <Members>
+            <MemberSet>
+                <Name>PSStandardMembers</Name>
+                <Members>
+                    <PropertySet>
+                        <Name>DefaultDisplayPropertySet</Name>
+                        <ReferencedProperties>
+                            <Name>MachineName</Name>
+                            <Name>TimeCreated</Name>
+                            <Name>FragmentSize</Name>
+                            <Name>Fragment</Name>
+                        </ReferencedProperties>
+                    </PropertySet>
+                </Members>
+            </MemberSet>
+            <ScriptProperty IsHidden="true">
+                <Name>IsDiscoveryProtocolPacket</Name>
+                <GetScriptBlock>
+                    if (
+                        [UInt16]0x2000 -eq [BitConverter]::ToUInt16($this.Fragment[21..20], 0) -or
+                        [UInt16]0x88CC -eq [BitConverter]::ToUInt16($this.Fragment[13..12], 0)
+                    ) { $true } else { $false }
+                </GetScriptBlock>
+                <SetScriptBlock>
+                    $null
+                </SetScriptBlock>
+            </ScriptProperty>
+            <ScriptProperty IsHidden="true">
+                <Name>DiscoveryProtocolType</Name>
+                <GetScriptBlock>
+                    if ([UInt16]0x2000 -eq [BitConverter]::ToUInt16($this.Fragment[21..20], 0)) {
+                        'CDP'
+                    }
+                    if ([UInt16]0x88CC -eq [BitConverter]::ToUInt16($this.Fragment[13..12], 0)) {
+                        'LLDP'
+                    }
+                </GetScriptBlock>
+            </ScriptProperty>
+            <ScriptProperty IsHidden="true">
+                <Name>SourceAddress</Name>
+                <GetScriptBlock>
+                    [PhysicalAddress]::new($this.Fragment[6..11]).ToString()
+                </GetScriptBlock>
+            </ScriptProperty>
+        </Members>
+    </Type>
+</Types>

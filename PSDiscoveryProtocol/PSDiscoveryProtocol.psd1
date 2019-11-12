@@ -12,7 +12,7 @@
 RootModule = 'PSDiscoveryProtocol'
 
 # Version number of this module.
-ModuleVersion = '1.0.1'
+ModuleVersion = '1.1.0'
 
 # Supported PSEditions
 CompatiblePSEditions = @('Desktop')
@@ -42,7 +42,7 @@ PowerShellVersion = '5.1'
 # PowerShellHostVersion = ''
 
 # Minimum version of Microsoft .NET Framework required by this module. This prerequisite is valid for the PowerShell Desktop edition only.
-DotNetFrameworkVersion = '4.6'
+DotNetFrameworkVersion = '4.6.1'
 
 # Minimum version of the common language runtime (CLR) required by this module. This prerequisite is valid for the PowerShell Desktop edition only.
 # CLRVersion = ''
@@ -60,7 +60,7 @@ DotNetFrameworkVersion = '4.6'
 # ScriptsToProcess = @()
 
 # Type files (.ps1xml) to be loaded when importing this module
-# TypesToProcess = @()
+TypesToProcess = @('PSDiscoveryProtocol.types.ps1xml')
 
 # Format files (.ps1xml) to be loaded when importing this module
 # FormatsToProcess = @()
@@ -70,10 +70,11 @@ DotNetFrameworkVersion = '4.6'
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
 FunctionsToExport = @(
-    'Capture-CDPPacket',
-    'Capture-LLDPPacket',
-    'Parse-CDPPacket',
-    'Parse-LLDPPacket'
+    'ConvertFrom-CDPPacket',
+    'ConvertFrom-LLDPPacket',
+    'Export-Pcap',
+    'Get-DiscoveryProtocolData',
+    'Invoke-DiscoveryProtocolCapture'
 )
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
@@ -83,7 +84,12 @@ FunctionsToExport = @(
 # VariablesToExport = '*'
 
 # Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
-# AliasesToExport = @()
+AliasesToExport = @(
+    'Capture-CDPPacket',
+    'Capture-LLDPPacket',
+    'Parse-CDPPacket',
+    'Parse-LLDPPacket'
+)
 
 # DSC resources to export from this module
 # DscResourcesToExport = @()
