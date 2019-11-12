@@ -44,6 +44,10 @@ function Invoke-DiscoveryProtocolCapture {
 
     If Type is LLDP, Duration defaults to 32. If Type is CDP or omitted, Duration defaults to 62.
 
+.OUTPUTS
+
+    DiscoveryProtocolPacket
+
 .EXAMPLE
 
     PS C:\> $Packet = Invoke-DiscoveryProtocolCapture -Type CDP -Duration 60
@@ -92,6 +96,7 @@ function Invoke-DiscoveryProtocolCapture {
 #>
 
     [CmdletBinding()]
+    [OutputType('DiscoveryProtocolPacket')]
     [Alias('Capture-CDPPacket', 'Capture-LLDPPacket')]
     param(
         [Parameter(Position=0,
