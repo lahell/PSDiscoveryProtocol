@@ -25,9 +25,6 @@
                         [UInt16]0x88CC -eq [BitConverter]::ToUInt16($this.Fragment[13..12], 0)
                     ) { $true } else { $false }
                 </GetScriptBlock>
-                <SetScriptBlock>
-                    $null
-                </SetScriptBlock>
             </ScriptProperty>
             <ScriptProperty IsHidden="true">
                 <Name>DiscoveryProtocolType</Name>
