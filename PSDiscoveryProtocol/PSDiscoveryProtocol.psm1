@@ -5,6 +5,37 @@ class DiscoveryProtocolPacket
     [datetime]$TimeCreated
     [int]$FragmentSize
     [byte[]]$Fragment
+
+    DiscoveryProtocolPacket([string]$MachineName, [datetime]$TimeCreated, [int]$FragmentSize, [byte[]]$Fragment)
+    {
+        $this.MachineName  = $MachineName
+        $this.TimeCreated  = $TimeCreated
+        $this.FragmentSize = $FragmentSize
+        $this.Fragment     = $Fragment
+
+        Add-Member -InputObject $this -MemberType ScriptProperty -Name IsDiscoveryProtocolPacket -Value {
+            if (
+                [UInt16]0x2000 -eq [BitConverter]::ToUInt16($this.Fragment[21..20], 0) -or
+                [UInt16]0x88CC -eq [BitConverter]::ToUInt16($this.Fragment[13..12], 0)
+            ) { return [bool]$true } else { return [bool]$false }
+        }
+
+        Add-Member -InputObject $this -MemberType ScriptProperty -Name DiscoveryProtocolType -Value {
+            if ([UInt16]0x2000 -eq [BitConverter]::ToUInt16($this.Fragment[21..20], 0)) {
+                return [string]'CDP'
+            }
+            elseif ([UInt16]0x88CC -eq [BitConverter]::ToUInt16($this.Fragment[13..12], 0)) {
+                return [string]'LLDP'
+            }
+            else {
+                return [string]::Empty
+            }
+        }
+
+        Add-Member -InputObject $this -MemberType ScriptProperty -Name SourceAddress -Value {
+            [PhysicalAddress]::new($this.Fragment[6..11]).ToString()
+        }
+    }
 }
 #endregion
 
