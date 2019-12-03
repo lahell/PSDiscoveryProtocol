@@ -60,7 +60,7 @@ DotNetFrameworkVersion = '4.6.1'
 # ScriptsToProcess = @()
 
 # Type files (.ps1xml) to be loaded when importing this module
-TypesToProcess = @('PSDiscoveryProtocol.types.ps1xml')
+# TypesToProcess = @('PSDiscoveryProtocol.types.ps1xml')
 
 # Format files (.ps1xml) to be loaded when importing this module
 # FormatsToProcess = @()
