@@ -237,13 +237,12 @@ function Invoke-DiscoveryProtocolCapture {
                 $FoundPacket = $null
 
                 foreach ($Event in $Events) {
-                    $Packet = [PSCustomObject] @{
-                        PSTypeName   = 'DiscoveryProtocolPacket'
-                        MachineName  = $Event.MachineName
-                        TimeCreated  = $Event.TimeCreated
-                        FragmentSize = $Event.FragmentSize
-                        Fragment     = $Event.Fragment
-                    }
+                    $Packet = [DiscoveryProtocolPacket]::new(
+                        $Event.MachineName,
+                        $Event.TimeCreated,
+                        $Event.FragmentSize,
+                        $Event.Fragment
+                    )
 
                     if ($Packet.IsDiscoveryProtocolPacket -and $Packet.SourceAddress -ne $MACAddress) {
                         $FoundPacket = $Packet
