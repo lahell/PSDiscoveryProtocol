@@ -170,9 +170,12 @@ function Invoke-DiscoveryProtocolCapture {
                 continue
             }
 
-            $ETLFile = Invoke-Command -ComputerName $Computer -ScriptBlock {
+            $PSSession = New-PSSession -ComputerName $Computer
+
+            $ETLFilePath = Invoke-Command -Session $PSSession -ScriptBlock {
                 $TempFile = New-TemporaryFile
-                Rename-Item -Path $TempFile.FullName -NewName $TempFile.FullName.Replace('.tmp', '.etl') -PassThru
+                $ETLFile = Rename-Item -Path $TempFile.FullName -NewName $TempFile.FullName.Replace('.tmp', '.etl') -PassThru
+                $ETLFile.FullName
             }
 
             $Adapter = Get-NetAdapter -Physical -CimSession $CimSession |
@@ -183,7 +186,7 @@ function Invoke-DiscoveryProtocolCapture {
 
             if ($Adapter) {
                 $SessionName = 'Capture-{0}' -f (Get-Date).ToString('s')
-                $Session = New-NetEventSession -Name $SessionName -LocalFilePath $ETLFile.FullName -CaptureMode SaveToFile -CimSession $CimSession
+                New-NetEventSession -Name $SessionName -LocalFilePath $ETLFilePath -CaptureMode SaveToFile -CimSession $CimSession | Out-Null
 
                 $LinkLayerAddress = switch ($Type) {
                     'CDP'   { '01-00-0c-cc-cc-cc' }
@@ -215,8 +218,8 @@ function Invoke-DiscoveryProtocolCapture {
 
                 Stop-NetEventSession -Name $SessionName -CimSession $CimSession
 
-                $Events = Invoke-Command -ComputerName $Computer -ScriptBlock {
-                    $Events = Get-WinEvent -Path $args[0] -Oldest -FilterXPath "*[System[EventID=1001]]"
+                $Events = Invoke-Command -Session $PSSession -ScriptBlock {
+                    $Events = Get-WinEvent -Path $ETLFile.FullName -Oldest -FilterXPath "*[System[EventID=1001]]"
 
                     [string[]]$XpathQueries = @(
                         "Event/EventData/Data[@Name='FragmentSize']"
@@ -232,7 +235,7 @@ function Invoke-DiscoveryProtocolCapture {
                         $EventData.FragmentSize, $EventData.Fragment = $Event.GetPropertyValues($PropertySelector)
                         $EventData
                     }
-                } -ArgumentList $Session.LocalFilePath
+                }
 
                 $FoundPacket = $null
 
@@ -252,9 +255,11 @@ function Invoke-DiscoveryProtocolCapture {
 
                 Remove-NetEventSession -Name $SessionName -CimSession $CimSession
 
-                Invoke-Command -ComputerName $Computer -ScriptBlock {
-                    Remove-Item -Path $args[0] -Force
-                } -ArgumentList $ETLFile.FullName
+                Invoke-Command -Session $PSSession -ScriptBlock {
+                    Remove-Item -Path $ETLFile.FullName -Force
+                }
+
+                Remove-PSSession -Session $PSSession
 
                 if ($FoundPacket) {
                     $FoundPacket
