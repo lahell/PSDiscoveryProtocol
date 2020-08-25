@@ -75,6 +75,10 @@ function Invoke-DiscoveryProtocolCapture {
 
     If Type is LLDP, Duration defaults to 32. If Type is CDP or omitted, Duration defaults to 62.
 
+.PARAMETER NoCleanup
+
+    If specified, the ETL file will not be deleted from %TEMP%.
+
 .OUTPUTS
 
     DiscoveryProtocolPacket
@@ -141,7 +145,10 @@ function Invoke-DiscoveryProtocolCapture {
 
         [Parameter(Position=2)]
         [ValidateSet('CDP', 'LLDP')]
-        [String]$Type
+        [String]$Type,
+
+        [Parameter()]
+        [switch]$NoCleanup
     )
 
     begin {
@@ -177,6 +184,8 @@ function Invoke-DiscoveryProtocolCapture {
                 $ETLFile = Rename-Item -Path $TempFile.FullName -NewName $TempFile.FullName.Replace('.tmp', '.etl') -PassThru
                 $ETLFile.FullName
             }
+
+            Write-Verbose "ETL File Path: $ETLFilePath"
 
             $Adapter = Get-NetAdapter -Physical -CimSession $CimSession |
                 Where-Object {$_.Status -eq 'Up' -and $_.InterfaceType -eq 6} |
@@ -255,8 +264,10 @@ function Invoke-DiscoveryProtocolCapture {
 
                 Remove-NetEventSession -Name $SessionName -CimSession $CimSession
 
-                Invoke-Command -Session $PSSession -ScriptBlock {
-                    Remove-Item -Path $ETLFile.FullName -Force
+                if (-not $NoCleanup.IsPresent) {
+                    Invoke-Command -Session $PSSession -ScriptBlock {
+                        Remove-Item -Path $ETLFile.FullName -Force
+                    }
                 }
 
                 Remove-PSSession -Session $PSSession
