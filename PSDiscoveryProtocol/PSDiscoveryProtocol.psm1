@@ -664,12 +664,21 @@ function Export-Pcap {
 
 #>
 
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'DiscoveryProtocolPacket')]
     param(
         [Parameter(Mandatory=$true,
             ValueFromPipeline=$true,
-            ValueFromPipelineByPropertyName=$true)]
+            ValueFromPipelineByPropertyName=$true,
+            ParameterSetName='DiscoveryProtocolPacket')]
         [DiscoveryProtocolPacket[]]$Packet,
+
+        [Parameter(Mandatory=$true,
+            ParameterSetName='BytesAndDateTime')]
+        [byte[]]$Bytes,
+
+        [Parameter(Mandatory=$false,
+            ParameterSetName='BytesAndDateTime')]
+        [datetime]$DateTime = (Get-Date),
 
         [Parameter(Mandatory=$true)]
         [ValidateScript({
@@ -714,17 +723,33 @@ function Export-Pcap {
     }
 
     process {
-        foreach ($item in $Packet) {
-            [uint32]$tsSec = ([DateTimeOffset]$item.TimeCreated).ToUnixTimeSeconds()
-            [uint32]$tsUsec = $item.TimeCreated.Millisecond
-            [uint32]$inclLen = $item.FragmentSize
-            [uint32]$origLen = $inclLen
+        switch ($PSCmdlet.ParameterSetName) {
+            'DiscoveryProtocolPacket' {
+                foreach ($item in $Packet) {
+                    [uint32]$tsSec = ([DateTimeOffset]$item.TimeCreated).ToUnixTimeSeconds()
+                    [uint32]$tsUsec = $item.TimeCreated.Millisecond
+                    [uint32]$inclLen = $item.FragmentSize
+                    [uint32]$origLen = $inclLen
 
-            $writer.Write($tsSec)
-            $writer.Write($tsUsec)
-            $writer.Write($inclLen)
-            $writer.Write($origLen)
-            $writer.Write($item.Fragment)
+                    $writer.Write($tsSec)
+                    $writer.Write($tsUsec)
+                    $writer.Write($inclLen)
+                    $writer.Write($origLen)
+                    $writer.Write($item.Fragment)
+                }
+            }
+            'BytesAndDateTime' {
+                [uint32]$tsSec = ([DateTimeOffset]$DateTime).ToUnixTimeSeconds()
+                [uint32]$tsUsec = $DateTime.Millisecond
+                [uint32]$inclLen = $Bytes.Length
+                [uint32]$origLen = $inclLen
+
+                $writer.Write($tsSec)
+                $writer.Write($tsUsec)
+                $writer.Write($inclLen)
+                $writer.Write($origLen)
+                $writer.Write($Bytes)
+            }
         }
     }
 
