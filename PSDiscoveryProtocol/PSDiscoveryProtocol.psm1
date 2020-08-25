@@ -424,41 +424,117 @@ function ConvertFrom-CDPPacket {
         [byte[]]$Packet
     )
 
-    begin {}
+    $Stream = New-Object System.IO.MemoryStream (,$Packet)
+    $Reader = New-Object System.IO.BinaryReader $Stream
 
-    process {
+    $Destination = [PhysicalAddress]$Reader.ReadBytes(6)
+    $Source = [PhysicalAddress]$Reader.ReadBytes(6)
+    $Length = [System.BitConverter]::ToUInt16($Reader.ReadBytes(2)[1..0], 0)
 
-        $Offset = 26
-        $Hash = @{}
+    $null = $Reader.ReadBytes(6)
 
-        while ($Offset -lt ($Packet.Length - 4)) {
+    $CDP = [System.BitConverter]::ToString($Reader.ReadBytes(2))
+    $Version = $Reader.ReadByte()
+    $TimeToLive = $Reader.ReadByte()
 
-            $Type   = [BitConverter]::ToUInt16($Packet[($Offset + 1)..$Offset], 0)
-            $Length = [BitConverter]::ToUInt16($Packet[($Offset + 3)..($Offset + 2)], 0)
+    $null = $Reader.ReadBytes(2)
 
-            switch ($Type)
-            {
-                1  { $Hash.Add('Device',    [System.Text.Encoding]::ASCII.GetString($Packet[($Offset + 4)..($Offset + $Length)])) }
-                3  { $Hash.Add('Port',      [System.Text.Encoding]::ASCII.GetString($Packet[($Offset + 4)..($Offset + $Length)])) }
-                6  { $Hash.Add('Model',     [System.Text.Encoding]::ASCII.GetString($Packet[($Offset + 4)..($Offset + $Length)])) }
-                10 { $Hash.Add('VLAN',      [BitConverter]::ToUInt16($Packet[($Offset + 5)..($Offset + 4)], 0)) }
-                22 { $Hash.Add('IPAddress', ([System.Net.IPAddress][byte[]]$Packet[($Offset + 13)..($Offset + 16)]).IPAddressToString) }
-            }
-
-            if ($Length -eq 0 ) {
-                $Offset = $Packet.Length
-            }
-
-            $Offset = $Offset + $Length
-
-        }
-
-        return [PSCustomObject]$Hash
-
+    $Tlv = @{
+        0x0001 = 'Device'
+        0x0002 = 'IPAddress'
+        0x0003 = 'Port'
+        0x0006 = 'Model'
+        0x000A = 'VLAN'
+        0x0016 = 'Management'
     }
 
-    end {}
+    $TypeString = 0x0001, 0x003, 0x006
+    $TypeAddress = 0x0002, 0x0016
+    $TypeInt = 0x000A
 
+    $IPv4 = 0xCC
+    $IPv6 = 0xAAAA0300000086DD
+
+    $Properties = @{}
+
+    Write-Verbose "Destination    : $Destination"
+    Write-Verbose "Source         : $Source"
+    Write-Verbose "Length         : $Length"
+    Write-Verbose "Protocol ID    : $CDP"
+    Write-Verbose "CDP Version    : $Version"
+    Write-Verbose "Time To Live   : $TimeToLive seconds"
+    Write-Verbose "----------------------------------------------------------------"
+
+    while ($Reader.PeekChar() -ne -1) {
+        $TlvType = [System.BitConverter]::ToUInt16($Reader.ReadBytes(2)[1..0], 0)
+        $TlvLength = [System.BitConverter]::ToUInt16($Reader.ReadBytes(2)[1..0], 0)
+
+        switch ($TlvType) {
+            {$_ -in $TypeString} {
+                $String = $Reader.ReadChars($TlvLength - 4) -join ''
+                $Properties.Add($Tlv.Item([int]$TlvType), $String)
+            }
+
+            {$_ -in $TypeAddress} {
+                $NumberOfAddresses = [System.BitConverter]::ToUInt32($Reader.ReadBytes(4)[3..0], 0)
+                $Addresses = New-Object System.Collections.Generic.List[String]
+
+                1..$NumberOfAddresses | ForEach-Object {
+                    $ProtocolType = $Reader.ReadByte()
+                    $ProtocolLength = $Reader.ReadByte()
+
+                    if ($ProtocolLength -eq 1) {
+                        $Protocol = $Reader.ReadByte()
+                    } else {
+                        $Protocol = [System.BitConverter]::ToInt64($Reader.ReadBytes(8)[7..0], 0)
+                    }
+
+                    $AddressLength = [System.BitConverter]::ToUInt16($Reader.ReadBytes(2)[1..0], 0)
+                    $AddressBytes = $Reader.ReadBytes($AddressLength)
+
+                    if (($ProtocolType -eq 0x01 -and $Protocol -eq $IPv4) -or ($ProtocolType -eq 0x02 -and $Protocol -eq $IPv6)) {
+                        $IPAddress = [System.Net.IPAddress]::new($AddressBytes).IPAddressToString
+                        $Addresses.Add($IPAddress)
+                    } else {
+                        $ProtocolBytes = [System.BitConverter]::GetBytes($Protocol)[7..0]
+                        $ProtocolHex = [System.BitConverter]::ToString($ProtocolBytes)
+                        $AddressHex = [System.BitConverter]::ToString($AddressBytes)
+
+                        Write-Verbose "ProtocolType   : $ProtocolType"
+                        Write-Verbose "ProtocolLength : $ProtocolLength"
+                        Write-Verbose "ProtocolHex    : $ProtocolHex"
+                        Write-Verbose "AddressLength  : $AddressLength"
+                        Write-Verbose "AddressHex     : $AddressHex"
+                        Write-Verbose "----------------------------------------------------------------"
+                    }
+                }
+
+                if ($Addresses.Count -gt 0) {
+                    $Properties.Add($Tlv.Item([int]$TlvType), $Addresses)
+                }
+            }
+
+            $TypeInt {
+                $NativeVlan = [System.BitConverter]::ToUInt16($Reader.ReadBytes(2)[1..0], 0)
+                $Properties.Add($Tlv.Item([int]$TlvType), $NativeVlan)
+            }
+
+            default {
+                $Bytes = $Reader.ReadBytes($TlvLength - 4)
+                $Chars = $Bytes -as [System.Char[]]
+                $Hex = [System.BitConverter]::ToString($Bytes)
+                $Ascii = $Chars -join ''
+
+                Write-Verbose "TlvType        : $TlvType"
+                Write-Verbose "TlvLength      : $TlvLength"
+                Write-Verbose "Hex            : $Hex"
+                Write-Verbose "Ascii          : $Ascii"
+                Write-Verbose "----------------------------------------------------------------"
+            }
+        }
+    }
+
+    New-Object PSObject -Property $Properties
 }
 #endregion
 
