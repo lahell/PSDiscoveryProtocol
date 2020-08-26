@@ -653,9 +653,13 @@ function ConvertFrom-LLDPPacket {
                     $AddrLen = $Packet[($Offset)]
                     $Subtype = $Packet[($Offset + 1)]
 
-                    if ($Subtype -eq 1)
-                    {
-                        $Hash.Add('IPAddress', ([System.Net.IPAddress][byte[]]$Packet[($Offset + 2)..($Offset + $AddrLen)]).IPAddressToString)
+                    if (-not $Hash.ContainsKey('IPAddress') -and $Subtype -in 1, 2) {
+                        $Addresses = New-Object System.Collections.Generic.List[String]
+                        $Hash.Add('IPAddress', $Addresses)
+                    }
+
+                    if ($Subtype -in 1, 2) {
+                        $Addresses.Add(([System.Net.IPAddress][byte[]]$Packet[($Offset + 2)..($Offset + $AddrLen)]).IPAddressToString)
                     }
 
                     $Offset += $Length
