@@ -635,6 +635,13 @@ function ConvertFrom-LLDPPacket {
                         $Hash.Add('Port', [System.Text.Encoding]::ASCII.GetString($Packet[($Offset + 1)..($Offset + $Length - 1)]))
                     }
 
+                    if ($Subtype -eq 4) {
+                        $AddressFamily = $Packet[($Offset + 1)]
+                        if ($AddressFamily -in 1, 2) {
+                            $Hash.Add('Port', [IPAddress]::new($Packet[($Offset + 2)..($Offset + $Length - 1)]))
+                        }
+                    }
+
                     if ($Subtype -eq 3) {
                         $Hash.Add('Port', [PhysicalAddress]::new($Packet[($Offset + 1)..($Offset + $Length - 1)]))
                     }
