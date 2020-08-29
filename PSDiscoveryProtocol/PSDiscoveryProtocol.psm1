@@ -598,6 +598,7 @@ function ConvertFrom-LLDPPacket {
 
     begin {
         $TlvType = @{
+            ChassisId            = 1
             PortId               = 2
             TimeToLive           = 3
             PortDescription      = 4
@@ -629,6 +630,28 @@ function ConvertFrom-LLDPPacket {
 
             switch ($Type)
             {
+                $TlvType.ChassisId {
+                    $Subtype = $Packet[($Offset)]
+
+                    if ($SubType -in (1, 2, 3, 6, 7)) {
+                        $Hash.Add('ChassisId', [System.Text.Encoding]::ASCII.GetString($Packet[($Offset + 1)..($Offset + $Length - 1)]))
+                    }
+
+                    if ($Subtype -eq 5) {
+                        $AddressFamily = $Packet[($Offset + 1)]
+                        if ($AddressFamily -in 1, 2) {
+                            $Hash.Add('ChassisId', [IPAddress]::new($Packet[($Offset + 2)..($Offset + $Length - 1)]))
+                        }
+                    }
+
+                    if ($Subtype -eq 4) {
+                        $Hash.Add('ChassisId', [PhysicalAddress]::new($Packet[($Offset + 1)..($Offset + $Length - 1)]))
+                    }
+
+                    $Offset += $Length
+                    break
+                }
+
                 $TlvType.PortId {
                     $Subtype = $Packet[($Offset)]
 
