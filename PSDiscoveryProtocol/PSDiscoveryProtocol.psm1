@@ -228,7 +228,13 @@ function Invoke-DiscoveryProtocolCapture {
                 Stop-NetEventSession -Name $SessionName -CimSession $CimSession
 
                 $Events = Invoke-Command -Session $PSSession -ScriptBlock {
-                    $Events = Get-WinEvent -Path $ETLFile.FullName -Oldest -FilterXPath "*[System[EventID=1001]]"
+                    try {
+                        $Events = Get-WinEvent -Path $ETLFile.FullName -Oldest -FilterXPath "*[System[EventID=1001]]" -ErrorAction Stop
+                    } catch {
+                        if ($_.FullyQualifiedErrorId -notmatch 'NoMatchingEventsFound') {
+                            Write-Error -Exception $_
+                        }
+                    }
 
                     [string[]]$XpathQueries = @(
                         "Event/EventData/Data[@Name='FragmentSize']"
