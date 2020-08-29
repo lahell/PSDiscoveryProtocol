@@ -599,6 +599,7 @@ function ConvertFrom-LLDPPacket {
     begin {
         $TlvType = @{
             PortId               = 2
+            TimeToLive           = 3
             PortDescription      = 4
             SystemName           = 5
             ManagementAddress    = 8
@@ -646,6 +647,12 @@ function ConvertFrom-LLDPPacket {
                         $Hash.Add('Port', [PhysicalAddress]::new($Packet[($Offset + 1)..($Offset + $Length - 1)]))
                     }
 
+                    $Offset += $Length
+                    break
+                }
+
+                $TlvType.TimeToLive {
+                    $Hash.Add('TimeToLive', [BitConverter]::ToUInt16($Packet[($Offset + 1)..$Offset], 0))
                     $Offset += $Length
                     break
                 }
