@@ -516,7 +516,7 @@ function ConvertFrom-CDPPacket {
                         $ProtocolBytes = [System.BitConverter]::GetBytes($Protocol)[7..0]
                         $ProtocolHex = [System.BitConverter]::ToString($ProtocolBytes)
                         $AddressHex = [System.BitConverter]::ToString($AddressBytes)
-                        
+
                         Write-Verbose "TlvType        : $TlvType"
                         Write-Verbose "TlvLength      : $TlvLength"
                         Write-Verbose "ProtocolType   : $ProtocolType"
@@ -760,7 +760,7 @@ function ConvertFrom-LLDPPacket {
                     if ($OUI -eq '00-80-C2' -and $Subtype -eq 1) {
                         $Hash.Add('VLAN', [BitConverter]::ToUInt16($Packet[($Offset + 5)..($Offset + 4)], 0))
                     }
-                    
+
                     $Bytes = $Packet[($Offset + 4)..($Offset + $Length - 1)]
                     $Hex = [System.BitConverter]::ToString($Bytes)
                     $Ascii = [System.Text.Encoding]::ASCII.GetString($Bytes)
