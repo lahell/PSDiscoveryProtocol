@@ -516,7 +516,9 @@ function ConvertFrom-CDPPacket {
                         $ProtocolBytes = [System.BitConverter]::GetBytes($Protocol)[7..0]
                         $ProtocolHex = [System.BitConverter]::ToString($ProtocolBytes)
                         $AddressHex = [System.BitConverter]::ToString($AddressBytes)
-
+                        
+                        Write-Verbose "TlvType        : $TlvType"
+                        Write-Verbose "TlvLength      : $TlvLength"
                         Write-Verbose "ProtocolType   : $ProtocolType"
                         Write-Verbose "ProtocolLength : $ProtocolLength"
                         Write-Verbose "ProtocolHex    : $ProtocolHex"
@@ -598,6 +600,7 @@ function ConvertFrom-LLDPPacket {
 
     begin {
         $TlvType = @{
+            EndOfLLDPDU          = 0
             ChassisId            = 1
             PortId               = 2
             TimeToLive           = 3
@@ -612,11 +615,12 @@ function ConvertFrom-LLDPPacket {
 
         $Destination = [PhysicalAddress]::new($Packet[0..5])
         $Source      = [PhysicalAddress]::new($Packet[6..11])
-        $LLDP        = [BitConverter]::ToUInt16($Packet[13..12], 0)
+        $EtherType   = [BitConverter]::ToString($Packet[12..13])
 
-        Write-Verbose "Destination: $Destination"
-        Write-Verbose "Source: $Source"
-        Write-Verbose "LLDP: $LLDP"
+        Write-Verbose "Destination    : $Destination"
+        Write-Verbose "Source         : $Source"
+        Write-Verbose "EtherType      : $EtherType"
+        Write-Verbose "----------------------------------------------------------------"
 
         $Offset = 14
         $Mask = 0x01FF
@@ -641,6 +645,18 @@ function ConvertFrom-LLDPPacket {
                         $AddressFamily = $Packet[($Offset + 1)]
                         if ($AddressFamily -in 1, 2) {
                             $Hash.Add('ChassisId', [IPAddress]::new($Packet[($Offset + 2)..($Offset + $Length - 1)]))
+                        } else {
+                            $Bytes = $Packet[($Offset + 2)..($Offset + $Length - 1)]
+                            $Hex = [System.BitConverter]::ToString($Bytes)
+                            $Ascii = [System.Text.Encoding]::ASCII.GetString($Bytes)
+
+                            Write-Verbose "TlvType        : $Type"
+                            Write-Verbose "TlvLength      : $Length"
+                            write-Verbose "SubType        : $Subtype"
+                            Write-Verbose "AddressFamily  : $AddressFamily"
+                            Write-Verbose "Hex            : $Hex"
+                            Write-Verbose "Ascii          : $Ascii"
+                            Write-Verbose "----------------------------------------------------------------"
                         }
                     }
 
@@ -663,6 +679,18 @@ function ConvertFrom-LLDPPacket {
                         $AddressFamily = $Packet[($Offset + 1)]
                         if ($AddressFamily -in 1, 2) {
                             $Hash.Add('Port', [IPAddress]::new($Packet[($Offset + 2)..($Offset + $Length - 1)]))
+                        } else {
+                            $Bytes = $Packet[($Offset + 2)..($Offset + $Length - 1)]
+                            $Hex = [System.BitConverter]::ToString($Bytes)
+                            $Ascii = [System.Text.Encoding]::ASCII.GetString($Bytes)
+
+                            Write-Verbose "TlvType        : $Type"
+                            Write-Verbose "TlvLength      : $Length"
+                            write-Verbose "SubType        : $Subtype"
+                            Write-Verbose "AddressFamily  : $AddressFamily"
+                            Write-Verbose "Hex            : $Hex"
+                            Write-Verbose "Ascii          : $Ascii"
+                            Write-Verbose "----------------------------------------------------------------"
                         }
                     }
 
@@ -703,6 +731,18 @@ function ConvertFrom-LLDPPacket {
 
                     if ($Subtype -in 1, 2) {
                         $Addresses.Add(([System.Net.IPAddress][byte[]]$Packet[($Offset + 2)..($Offset + $AddrLen)]).IPAddressToString)
+                    } else {
+                        $Bytes = $Packet[($Offset + 2)..($Offset + $AddrLen)]
+                        $Hex = [System.BitConverter]::ToString($Bytes)
+                        $Ascii = [System.Text.Encoding]::ASCII.GetString($Bytes)
+
+                        Write-Verbose "TlvType        : $Type"
+                        Write-Verbose "TlvLength      : $Length"
+                        Write-Verbose "AddressLength  : $AddrLen"
+                        write-Verbose "SubType        : $Subtype"
+                        Write-Verbose "Hex            : $Hex"
+                        Write-Verbose "Ascii          : $Ascii"
+                        Write-Verbose "----------------------------------------------------------------"
                     }
 
                     $Offset += $Length
@@ -711,40 +751,50 @@ function ConvertFrom-LLDPPacket {
 
                 $TlvType.OrganizationSpecific {
                     $OUI = [System.BitConverter]::ToString($Packet[($Offset)..($Offset + 2)])
+                    $Subtype = $Packet[($Offset + 3)]
 
-                    if ($OUI -eq '00-12-BB') {
-                        $Subtype = $Packet[($Offset + 3)]
-                        if ($Subtype -eq 10) {
-                            $Hash.Add('Model', [System.Text.Encoding]::ASCII.GetString($Packet[($Offset + 4)..($Offset + $Length - 1)]))
-                            $Offset += $Length
-                            break
-                        }
+                    if ($OUI -eq '00-12-BB' -and $Subtype -eq 10) {
+                        $Hash.Add('Model', [System.Text.Encoding]::ASCII.GetString($Packet[($Offset + 4)..($Offset + $Length - 1)]))
                     }
 
-                    if ($OUI -eq '00-80-C2') {
-                        $Subtype = $Packet[($Offset + 3)]
-                        if ($Subtype -eq 1) {
-                            $Hash.Add('VLAN', [BitConverter]::ToUInt16($Packet[($Offset + 5)..($Offset + 4)], 0))
-                            $Offset += $Length
-                            break
-                        }
+                    if ($OUI -eq '00-80-C2' -and $Subtype -eq 1) {
+                        $Hash.Add('VLAN', [BitConverter]::ToUInt16($Packet[($Offset + 5)..($Offset + 4)], 0))
                     }
+                    
+                    $Bytes = $Packet[($Offset + 4)..($Offset + $Length - 1)]
+                    $Hex = [System.BitConverter]::ToString($Bytes)
+                    $Ascii = [System.Text.Encoding]::ASCII.GetString($Bytes)
 
-                    $Tlv = [PSCustomObject] @{
-                        Type = $Type
-                        Value = [System.Text.Encoding]::ASCII.GetString($Packet[$Offset..($Offset + $Length)])
-                    }
-                    Write-Verbose $Tlv
+                    Write-Verbose "TlvType        : $Type"
+                    Write-Verbose "TlvLength      : $Length"
+                    Write-Verbose "OUI            : $OUI"
+                    write-Verbose "SubType        : $SubType"
+                    Write-Verbose "Hex            : $Hex"
+                    Write-Verbose "Ascii          : $Ascii"
+                    Write-Verbose "----------------------------------------------------------------"
+
                     $Offset += $Length
                     break
                 }
 
+                $TlvType.EndOfLLDPDU {
+                    Write-Verbose "TlvName        : End Of LLDPDU"
+                    Write-Verbose "TlvType        : $Type"
+                    Write-Verbose "TlvLength      : $Length"
+                    Write-Verbose "----------------------------------------------------------------"
+                }
+
                 default {
-                    $Tlv = [PSCustomObject] @{
-                        Type = $Type
-                        Value = [System.Text.Encoding]::ASCII.GetString($Packet[$Offset..($Offset + $Length)])
-                    }
-                    Write-Verbose $Tlv
+                    $Bytes = $Packet[$Offset..($Offset + $Length - 1)]
+                    $Hex = [System.BitConverter]::ToString($Bytes)
+                    $Ascii = [System.Text.Encoding]::ASCII.GetString($Bytes)
+
+                    Write-Verbose "TlvType        : $Type"
+                    Write-Verbose "TlvLength      : $Length"
+                    Write-Verbose "Hex            : $Hex"
+                    Write-Verbose "Ascii          : $Ascii"
+                    Write-Verbose "----------------------------------------------------------------"
+
                     $Offset += $Length
                     break
                 }
