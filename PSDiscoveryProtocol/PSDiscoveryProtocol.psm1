@@ -208,7 +208,17 @@ function Invoke-DiscoveryProtocolCapture {
                     }
                 }
 
-                New-NetEventSession -Name $SessionName -LocalFilePath $ETLFilePath -CaptureMode SaveToFile -CimSession $CimSession | Out-Null
+                try {
+                    New-NetEventSession -Name $SessionName -LocalFilePath $ETLFilePath -CaptureMode SaveToFile -CimSession $CimSession -ErrorAction Stop | Out-Null
+                } catch [Microsoft.Management.Infrastructure.CimException] {
+                    if ($_.Exception.NativeErrorCode -eq 'AlreadyExists') {
+                        $Message = "Another NetEventSession already exists. Run Invoke-DiscoveryProtocolCapture with -Force switch to remove existing NetEventSessions."
+                        Write-Error -Message $Message
+                        return
+                    } else {
+                        Write-Error -Exception $_
+                    }
+                }
 
                 $LinkLayerAddress = switch ($Type) {
                     'CDP'   { '01-00-0c-cc-cc-cc' }
