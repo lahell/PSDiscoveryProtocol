@@ -148,7 +148,10 @@ function Invoke-DiscoveryProtocolCapture {
         [String]$Type,
 
         [Parameter()]
-        [switch]$NoCleanup
+        [switch]$NoCleanup,
+
+        [Parameter()]
+        [switch]$Force
     )
 
     begin {
@@ -195,6 +198,16 @@ function Invoke-DiscoveryProtocolCapture {
 
             if ($Adapter) {
                 $SessionName = 'Capture-{0}' -f (Get-Date).ToString('s')
+
+                if ($Force.IsPresent) {
+                    Get-NetEventSession -CimSession $CimSession | ForEach-Object {
+                        if ($_.SessionStatus -eq 'Running') {
+                            $_ | Stop-NetEventSession -CimSession $CimSession
+                        }
+                        $_ | Remove-NetEventSession -CimSession $CimSession
+                    }
+                }
+
                 New-NetEventSession -Name $SessionName -LocalFilePath $ETLFilePath -CaptureMode SaveToFile -CimSession $CimSession | Out-Null
 
                 $LinkLayerAddress = switch ($Type) {
