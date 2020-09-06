@@ -79,6 +79,10 @@ function Invoke-DiscoveryProtocolCapture {
 
     If specified, the ETL file will not be deleted from %TEMP%.
 
+.PARAMETER Force
+
+    If specified, any existing NetEventSession will be removed.
+
 .OUTPUTS
 
     DiscoveryProtocolPacket
