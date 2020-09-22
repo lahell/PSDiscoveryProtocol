@@ -5,13 +5,16 @@ Capture and parse CDP and LLDP packets on local or remote computers
 ### CDP and LLDP
 PSDiscoveryProtocol does not return all information available in CDP and LLDP packets. If you want to know what information is available use `Export-Pcap` and open the pcap file in Wireshark or another tool with a more complete implementation.
 
-Some vendors only send mandatory TLVs in which case this module will only return Port from captured LLDP packets.
-
 ### Installation
 
 ```PowerShell
 Install-Module -Name PSDiscoveryProtocol
 ```
+
+### SCCM Hardware Inventory
+PSDiscoveryProtocol can add port information to SCCM Hardware Inventory on your Windows 10 clients.
+
+Take a look here for details: [PSDiscoveryProtocol-SCCM-HWInventory](https://github.com/lahell/PSDiscoveryProtocol-SCCM-HWInventory)
 
 ### Usage
 On this page you will find a few examples of how to use this module.
