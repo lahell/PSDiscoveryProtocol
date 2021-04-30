@@ -1,17 +1,15 @@
 #region classes
-class DiscoveryProtocolPacket
-{
+class DiscoveryProtocolPacket {
     [string]$MachineName
     [datetime]$TimeCreated
     [int]$FragmentSize
     [byte[]]$Fragment
 
-    DiscoveryProtocolPacket([string]$MachineName, [datetime]$TimeCreated, [int]$FragmentSize, [byte[]]$Fragment)
-    {
-        $this.MachineName  = $MachineName
-        $this.TimeCreated  = $TimeCreated
+    DiscoveryProtocolPacket([string]$MachineName, [datetime]$TimeCreated, [int]$FragmentSize, [byte[]]$Fragment) {
+        $this.MachineName = $MachineName
+        $this.TimeCreated = $TimeCreated
         $this.FragmentSize = $FragmentSize
-        $this.Fragment     = $Fragment
+        $this.Fragment = $Fragment
 
         Add-Member -InputObject $this -MemberType ScriptProperty -Name IsDiscoveryProtocolPacket -Value {
             if (
@@ -42,7 +40,7 @@ class DiscoveryProtocolPacket
 #region function Invoke-DiscoveryProtocolCapture
 function Invoke-DiscoveryProtocolCapture {
 
-<#
+    <#
 
 .SYNOPSIS
 
@@ -138,16 +136,16 @@ function Invoke-DiscoveryProtocolCapture {
     [OutputType('DiscoveryProtocolPacket')]
     [Alias('Capture-CDPPacket', 'Capture-LLDPPacket')]
     param(
-        [Parameter(Position=0,
-            ValueFromPipeline=$true,
-            ValueFromPipelineByPropertyName=$true)]
+        [Parameter(Position = 0,
+            ValueFromPipeline = $true,
+            ValueFromPipelineByPropertyName = $true)]
         [Alias('CN', 'Computer')]
         [String[]]$ComputerName = $env:COMPUTERNAME,
 
-        [Parameter(Position=1)]
+        [Parameter(Position = 1)]
         [Int16]$Duration = $(if ($Type -eq 'LLDP') { 32 } else { 62 }),
 
-        [Parameter(Position=2)]
+        [Parameter(Position = 2)]
         [ValidateSet('CDP', 'LLDP')]
         [String]$Type,
 
@@ -177,16 +175,32 @@ function Invoke-DiscoveryProtocolCapture {
 
         foreach ($Computer in $ComputerName) {
 
-            try {
-                $CimSession = New-CimSession -ComputerName $Computer -ErrorAction Stop
-            } catch {
-                Write-Warning "Unable to create CimSession. Please make sure WinRM and PSRemoting is enabled on $Computer."
-                continue
+            if ($env:COMPUTERNAME -eq $Computer) {
+                Write-Verbose "Local computer detected..."
+                
+                $CimSession = @{}
+                $PSSession = @{}
             }
+            else {
+                Write-Verbose "Creating remote sessions..."
 
-            $PSSession = New-PSSession -ComputerName $Computer
+                try {
+                    $CimSession = @{
+                        CimSession = New-CimSession -ComputerName $Computer -ErrorAction Stop
+                    }                    
+                }
+                catch {
+                    Write-Warning "Unable to create CimSession. Please make sure WinRM and PSRemoting is enabled on $Computer."
+                    continue
+                }
 
-            $ETLFilePath = Invoke-Command -Session $PSSession -ScriptBlock {
+                $PSSession = @{
+                    Session = New-PSSession -ComputerName $Computer
+
+                }
+            }
+    
+            $ETLFilePath = Invoke-Command @PSSession -ScriptBlock {
                 $TempFile = New-TemporaryFile
                 $ETLFile = Rename-Item -Path $TempFile.FullName -NewName $TempFile.FullName.Replace('.tmp', '.etl') -PassThru
                 $ETLFile.FullName
@@ -194,9 +208,9 @@ function Invoke-DiscoveryProtocolCapture {
 
             Write-Verbose "ETL File Path: $ETLFilePath"
 
-            $Adapter = Get-NetAdapter -Physical -CimSession $CimSession |
-                Where-Object {$_.Status -eq 'Up' -and $_.InterfaceType -eq 6} |
-                Select-Object -First 1 Name, MacAddress
+            $Adapter = Get-NetAdapter -Physical @CimSession |
+            Where-Object { $_.Status -eq 'Up' -and $_.InterfaceType -eq 6 } |
+            Select-Object -First 1 Name, MacAddress
 
             $MACAddress = [PhysicalAddress]::Parse($Adapter.MacAddress).ToString()
 
@@ -204,44 +218,45 @@ function Invoke-DiscoveryProtocolCapture {
                 $SessionName = 'Capture-{0}' -f (Get-Date).ToString('s')
 
                 if ($Force.IsPresent) {
-                    Get-NetEventSession -CimSession $CimSession | ForEach-Object {
+                    Get-NetEventSession @CimSession | ForEach-Object {
                         if ($_.SessionStatus -eq 'Running') {
-                            $_ | Stop-NetEventSession -CimSession $CimSession
+                            $_ | Stop-NetEventSession @CimSession
                         }
-                        $_ | Remove-NetEventSession -CimSession $CimSession
+                        $_ | Remove-NetEventSession @CimSession
                     }
                 }
 
                 try {
-                    New-NetEventSession -Name $SessionName -LocalFilePath $ETLFilePath -CaptureMode SaveToFile -CimSession $CimSession -ErrorAction Stop | Out-Null
-                } catch [Microsoft.Management.Infrastructure.CimException] {
+                    New-NetEventSession -Name $SessionName -LocalFilePath $ETLFilePath -CaptureMode SaveToFile @CimSession -ErrorAction Stop | Out-Null                    
+                }
+                catch [Microsoft.Management.Infrastructure.CimException] {
                     if ($_.Exception.NativeErrorCode -eq 'AlreadyExists') {
                         $Message = "Another NetEventSession already exists. Run Invoke-DiscoveryProtocolCapture with -Force switch to remove existing NetEventSessions."
                         Write-Error -Message $Message
                         return
-                    } else {
+                    }
+                    else {
                         Write-Error -Exception $_
                     }
                 }
 
                 $LinkLayerAddress = switch ($Type) {
-                    'CDP'   { '01-00-0c-cc-cc-cc' }
-                    'LLDP'  { '01-80-c2-00-00-0e', '01-80-c2-00-00-03', '01-80-c2-00-00-00' }
+                    'CDP' { '01-00-0c-cc-cc-cc' }
+                    'LLDP' { '01-80-c2-00-00-0e', '01-80-c2-00-00-03', '01-80-c2-00-00-00' }
                     Default { '01-00-0c-cc-cc-cc', '01-80-c2-00-00-0e', '01-80-c2-00-00-03', '01-80-c2-00-00-00' }
                 }
 
                 $PacketCaptureParams = @{
                     SessionName      = $SessionName
                     TruncationLength = 0
-                    CaptureType      = 'Physical'
-                    CimSession       = $CimSession
+                    CaptureType      = 'Physical'                    
                     LinkLayerAddress = $LinkLayerAddress
                 }
 
-                Add-NetEventPacketCaptureProvider @PacketCaptureParams | Out-Null
-                Add-NetEventNetworkAdapter -Name $Adapter.Name -PromiscuousMode $True -CimSession $CimSession | Out-Null
+                Add-NetEventPacketCaptureProvider @PacketCaptureParams @CimSession | Out-Null
+                Add-NetEventNetworkAdapter -Name $Adapter.Name -PromiscuousMode $True @CimSession | Out-Null
 
-                Start-NetEventSession -Name $SessionName -CimSession $CimSession
+                Start-NetEventSession -Name $SessionName @CimSession
 
                 $Seconds = $Duration
                 $End = (Get-Date).AddSeconds($Seconds)
@@ -252,12 +267,17 @@ function Invoke-DiscoveryProtocolCapture {
                     [System.Threading.Thread]::Sleep(500)
                 }
 
-                Stop-NetEventSession -Name $SessionName -CimSession $CimSession
+                Stop-NetEventSession -Name $SessionName @CimSession
 
-                $Events = Invoke-Command -Session $PSSession -ScriptBlock {
+                $Events = Invoke-Command @PSSession -ScriptBlock {
+                    param(
+                        $ETLFilePath
+                    )
+
                     try {
-                        $Events = Get-WinEvent -Path $ETLFile.FullName -Oldest -FilterXPath "*[System[EventID=1001]]" -ErrorAction Stop
-                    } catch {
+                        $Events = Get-WinEvent -Path $ETLFilePath -Oldest -FilterXPath "*[System[EventID=1001]]" -ErrorAction Stop
+                    }
+                    catch {
                         if ($_.FullyQualifiedErrorId -notmatch 'NoMatchingEventsFound') {
                             Write-Error -Exception $_
                         }
@@ -277,7 +297,7 @@ function Invoke-DiscoveryProtocolCapture {
                         $EventData.FragmentSize, $EventData.Fragment = $Event.GetPropertyValues($PropertySelector)
                         $EventData
                     }
-                }
+                } -ArgumentList $ETLFilePath
 
                 $FoundPacket = $null
 
@@ -295,23 +315,31 @@ function Invoke-DiscoveryProtocolCapture {
                     }
                 }
 
-                Remove-NetEventSession -Name $SessionName -CimSession $CimSession
+                Remove-NetEventSession -Name $SessionName @CimSession
 
                 if (-not $NoCleanup.IsPresent) {
-                    Invoke-Command -Session $PSSession -ScriptBlock {
-                        Remove-Item -Path $ETLFile.FullName -Force
-                    }
+                    Invoke-Command @PSSession -ScriptBlock {
+                        param(
+                            $ETLFilePath
+                        )
+
+                        Remove-Item -Path $ETLFilePath -Force
+                    } -ArgumentList $ETLFilePath
                 }
 
-                Remove-PSSession -Session $PSSession
-
+                if ($env:COMPUTERNAME -ne $Computer) {
+                    Remove-PSSession @PSSession
+                }
+                
                 if ($FoundPacket) {
                     $FoundPacket
-                } else {
+                }
+                else {
                     Write-Warning "No discovery protocol packets captured on $Computer in $Seconds seconds."
                     return
                 }
-            } else {
+            }
+            else {
                 Write-Warning "Unable to find a connected wired adapter on $Computer."
                 return
             }
@@ -325,7 +353,7 @@ function Invoke-DiscoveryProtocolCapture {
 #region function Get-DiscoveryProtocolData
 function Get-DiscoveryProtocolData {
 
-<#
+    <#
 
 .SYNOPSIS
 
@@ -392,10 +420,10 @@ function Get-DiscoveryProtocolData {
     [CmdletBinding()]
     [Alias('Parse-CDPPacket', 'Parse-LLDPPacket')]
     param(
-        [Parameter(Position=0,
-            Mandatory=$true,
-            ValueFromPipeline=$true,
-            ValueFromPipelineByPropertyName=$true)]
+        [Parameter(Position = 0,
+            Mandatory = $true,
+            ValueFromPipeline = $true,
+            ValueFromPipelineByPropertyName = $true)]
         [DiscoveryProtocolPacket[]]
         $Packet
     )
@@ -410,8 +438,8 @@ function Get-DiscoveryProtocolData {
     process {
         foreach ($item in $Packet) {
             switch ($item.DiscoveryProtocolType) {
-                'CDP'   { $PacketData = ConvertFrom-CDPPacket -Packet $item.Fragment }
-                'LLDP'  { $PacketData = ConvertFrom-LLDPPacket -Packet $item.Fragment }
+                'CDP' { $PacketData = ConvertFrom-CDPPacket -Packet $item.Fragment }
+                'LLDP' { $PacketData = ConvertFrom-LLDPPacket -Packet $item.Fragment }
                 Default { throw 'No valid CDP or LLDP found in $Packet' }
             }
 
@@ -428,7 +456,7 @@ function Get-DiscoveryProtocolData {
 #region function ConvertFrom-CDPPacket
 function ConvertFrom-CDPPacket {
 
-<#
+    <#
 
 .SYNOPSIS
 
@@ -463,12 +491,12 @@ function ConvertFrom-CDPPacket {
 
     [CmdletBinding()]
     param(
-        [Parameter(Position=0,
-            Mandatory=$true)]
+        [Parameter(Position = 0,
+            Mandatory = $true)]
         [byte[]]$Packet
     )
 
-    $Stream = New-Object System.IO.MemoryStream (,$Packet)
+    $Stream = New-Object System.IO.MemoryStream (, $Packet)
     $Reader = New-Object System.IO.BinaryReader $Stream
 
     $Destination = [PhysicalAddress]$Reader.ReadBytes(6)
@@ -514,12 +542,12 @@ function ConvertFrom-CDPPacket {
         $TlvLength = [System.BitConverter]::ToUInt16($Reader.ReadBytes(2)[1..0], 0)
 
         switch ($TlvType) {
-            {$_ -in $TypeString} {
+            { $_ -in $TypeString } {
                 $String = $Reader.ReadChars($TlvLength - 4) -join ''
                 $Properties.Add($Tlv.Item([int]$TlvType), $String)
             }
 
-            {$_ -in $TypeAddress} {
+            { $_ -in $TypeAddress } {
                 $NumberOfAddresses = [System.BitConverter]::ToUInt32($Reader.ReadBytes(4)[3..0], 0)
                 $Addresses = New-Object System.Collections.Generic.List[String]
 
@@ -529,7 +557,8 @@ function ConvertFrom-CDPPacket {
 
                     if ($ProtocolLength -eq 1) {
                         $Protocol = $Reader.ReadByte()
-                    } else {
+                    }
+                    else {
                         $Protocol = [System.BitConverter]::ToInt64($Reader.ReadBytes(8)[7..0], 0)
                     }
 
@@ -539,7 +568,8 @@ function ConvertFrom-CDPPacket {
                     if (($ProtocolType -eq 0x01 -and $Protocol -eq $IPv4) -or ($ProtocolType -eq 0x02 -and $Protocol -eq $IPv6)) {
                         $IPAddress = [System.Net.IPAddress]::new($AddressBytes).IPAddressToString
                         $Addresses.Add($IPAddress)
-                    } else {
+                    }
+                    else {
                         $ProtocolBytes = [System.BitConverter]::GetBytes($Protocol)[7..0]
                         $ProtocolHex = [System.BitConverter]::ToString($ProtocolBytes)
                         $AddressHex = [System.BitConverter]::ToString($AddressBytes)
@@ -587,7 +617,7 @@ function ConvertFrom-CDPPacket {
 #region function ConvertFrom-LLDPPacket
 function ConvertFrom-LLDPPacket {
 
-<#
+    <#
 
 .SYNOPSIS
 
@@ -620,8 +650,8 @@ function ConvertFrom-LLDPPacket {
 
     [CmdletBinding()]
     param(
-        [Parameter(Position=0,
-            Mandatory=$true)]
+        [Parameter(Position = 0,
+            Mandatory = $true)]
         [byte[]]$Packet
     )
 
@@ -641,8 +671,8 @@ function ConvertFrom-LLDPPacket {
     process {
 
         $Destination = [PhysicalAddress]::new($Packet[0..5])
-        $Source      = [PhysicalAddress]::new($Packet[6..11])
-        $EtherType   = [BitConverter]::ToString($Packet[12..13])
+        $Source = [PhysicalAddress]::new($Packet[6..11])
+        $EtherType = [BitConverter]::ToString($Packet[12..13])
 
         Write-Verbose "Destination    : $Destination"
         Write-Verbose "Source         : $Source"
@@ -653,14 +683,12 @@ function ConvertFrom-LLDPPacket {
         $Mask = 0x01FF
         $Hash = @{}
 
-        while ($Offset -lt $Packet.Length)
-        {
+        while ($Offset -lt $Packet.Length) {
             $Type = $Packet[$Offset] -shr 1
             $Length = [BitConverter]::ToUInt16($Packet[($Offset + 1)..$Offset], 0) -band $Mask
             $Offset += 2
 
-            switch ($Type)
-            {
+            switch ($Type) {
                 $TlvType.ChassisId {
                     $Subtype = $Packet[($Offset)]
 
@@ -672,7 +700,8 @@ function ConvertFrom-LLDPPacket {
                         $AddressFamily = $Packet[($Offset + 1)]
                         if ($AddressFamily -in 1, 2) {
                             $Hash.Add('ChassisId', [IPAddress]::new($Packet[($Offset + 2)..($Offset + $Length - 1)]))
-                        } else {
+                        }
+                        else {
                             $Bytes = $Packet[($Offset + 2)..($Offset + $Length - 1)]
                             $Hex = [System.BitConverter]::ToString($Bytes)
                             $Ascii = [System.Text.Encoding]::ASCII.GetString($Bytes)
@@ -706,7 +735,8 @@ function ConvertFrom-LLDPPacket {
                         $AddressFamily = $Packet[($Offset + 1)]
                         if ($AddressFamily -in 1, 2) {
                             $Hash.Add('Port', [IPAddress]::new($Packet[($Offset + 2)..($Offset + $Length - 1)]))
-                        } else {
+                        }
+                        else {
                             $Bytes = $Packet[($Offset + 2)..($Offset + $Length - 1)]
                             $Hex = [System.BitConverter]::ToString($Bytes)
                             $Ascii = [System.Text.Encoding]::ASCII.GetString($Bytes)
@@ -758,7 +788,8 @@ function ConvertFrom-LLDPPacket {
 
                     if ($Subtype -in 1, 2) {
                         $Addresses.Add(([System.Net.IPAddress][byte[]]$Packet[($Offset + 2)..($Offset + $AddrLen)]).IPAddressToString)
-                    } else {
+                    }
+                    else {
                         $Bytes = $Packet[($Offset + 2)..($Offset + $AddrLen)]
                         $Hex = [System.BitConverter]::ToString($Bytes)
                         $Ascii = [System.Text.Encoding]::ASCII.GetString($Bytes)
@@ -837,7 +868,7 @@ function ConvertFrom-LLDPPacket {
 #region function Export-Pcap
 function Export-Pcap {
 
-<#
+    <#
 
 .SYNOPSIS
 
@@ -877,38 +908,39 @@ function Export-Pcap {
 
     [CmdletBinding(DefaultParameterSetName = 'DiscoveryProtocolPacket')]
     param(
-        [Parameter(Mandatory=$true,
-            ValueFromPipeline=$true,
-            ValueFromPipelineByPropertyName=$true,
-            ParameterSetName='DiscoveryProtocolPacket')]
+        [Parameter(Mandatory = $true,
+            ValueFromPipeline = $true,
+            ValueFromPipelineByPropertyName = $true,
+            ParameterSetName = 'DiscoveryProtocolPacket')]
         [DiscoveryProtocolPacket[]]$Packet,
 
-        [Parameter(Mandatory=$true,
-            ParameterSetName='BytesAndDateTime')]
+        [Parameter(Mandatory = $true,
+            ParameterSetName = 'BytesAndDateTime')]
         [byte[]]$Bytes,
 
-        [Parameter(Mandatory=$false,
-            ParameterSetName='BytesAndDateTime')]
+        [Parameter(Mandatory = $false,
+            ParameterSetName = 'BytesAndDateTime')]
         [datetime]$DateTime = (Get-Date),
 
-        [Parameter(Mandatory=$true)]
-        [ValidateScript({
-            if ([System.IO.Path]::IsPathRooted($_)) {
-                $AbsolutePath = $_
-            } else {
-                $AbsolutePath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($_)
-            }
-            if (-not(Test-Path (Split-Path $AbsolutePath -Parent))) {
-                throw "Folder does not exist"
-            }
-            if ($_ -notmatch '\.pcap$') {
-                throw "Extension must be pcap"
-            }
-            return $true
-        })]
+        [Parameter(Mandatory = $true)]
+        [ValidateScript( {
+                if ([System.IO.Path]::IsPathRooted($_)) {
+                    $AbsolutePath = $_
+                }
+                else {
+                    $AbsolutePath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($_)
+                }
+                if (-not(Test-Path (Split-Path $AbsolutePath -Parent))) {
+                    throw "Folder does not exist"
+                }
+                if ($_ -notmatch '\.pcap$') {
+                    throw "Extension must be pcap"
+                }
+                return $true
+            })]
         [System.IO.FileInfo]$Path,
 
-        [Parameter(Mandatory=$false)]
+        [Parameter(Mandatory = $false)]
         [switch]$Invoke
     )
 
