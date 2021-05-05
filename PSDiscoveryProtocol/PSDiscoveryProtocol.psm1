@@ -633,6 +633,7 @@ function ConvertFrom-LLDPPacket {
             TimeToLive           = 3
             PortDescription      = 4
             SystemName           = 5
+            SystemDescription    = 6
             ManagementAddress    = 8
             OrganizationSpecific = 127
         }
@@ -736,13 +737,19 @@ function ConvertFrom-LLDPPacket {
                 }
 
                 $TlvType.PortDescription {
-                    $Hash.Add('Description', [System.Text.Encoding]::ASCII.GetString($Packet[$Offset..($Offset + $Length - 1)]))
+                    $Hash.Add('PortDescription', [System.Text.Encoding]::ASCII.GetString($Packet[$Offset..($Offset + $Length - 1)]))
                     $Offset += $Length
                     break
                 }
 
                 $TlvType.SystemName {
                     $Hash.Add('Device', [System.Text.Encoding]::ASCII.GetString($Packet[$Offset..($Offset + $Length - 1)]))
+                    $Offset += $Length
+                    break
+                }
+
+                $TlvType.SystemDescription {
+                    $Hash.Add('SystemDescription', [System.Text.Encoding]::ASCII.GetString($Packet[$Offset..($Offset + $Length - 1)]))
                     $Offset += $Length
                     break
                 }
