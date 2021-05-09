@@ -177,16 +177,30 @@ function Invoke-DiscoveryProtocolCapture {
 
         foreach ($Computer in $ComputerName) {
 
-            try {
-                $CimSession = New-CimSession -ComputerName $Computer -ErrorAction Stop
-            } catch {
-                Write-Warning "Unable to create CimSession. Please make sure WinRM and PSRemoting is enabled on $Computer."
-                continue
+            if ($env:COMPUTERNAME -eq $Computer) {
+                Write-Verbose "Local computer detected..."
+                
+                $CimSession = @{}
+                $PSSession = @{}
+            }
+            else {
+                Write-Verbose "Creating remote sessions..."
+
+                try {
+                    $CimSession = @{
+                        CimSession = New-CimSession -ComputerName $Computer -ErrorAction Stop
+                    }
+                } catch {
+                    Write-Warning "Unable to create CimSession. Please make sure WinRM and PSRemoting is enabled on $Computer."
+                    continue
+                }
+
+                $PSSession = @{
+                    Session = New-PSSession -ComputerName $Computer
+                }
             }
 
-            $PSSession = New-PSSession -ComputerName $Computer
-
-            $ETLFilePath = Invoke-Command -Session $PSSession -ScriptBlock {
+            $ETLFilePath = Invoke-Command @PSSession -ScriptBlock {
                 $TempFile = New-TemporaryFile
                 $ETLFile = Rename-Item -Path $TempFile.FullName -NewName $TempFile.FullName.Replace('.tmp', '.etl') -PassThru
                 $ETLFile.FullName
@@ -194,7 +208,7 @@ function Invoke-DiscoveryProtocolCapture {
 
             Write-Verbose "ETL File Path: $ETLFilePath"
 
-            $Adapter = Get-NetAdapter -Physical -CimSession $CimSession |
+            $Adapter = Get-NetAdapter -Physical @CimSession |
                 Where-Object {$_.Status -eq 'Up' -and $_.InterfaceType -eq 6} |
                 Select-Object -First 1 Name, MacAddress
 
@@ -204,16 +218,16 @@ function Invoke-DiscoveryProtocolCapture {
                 $SessionName = 'Capture-{0}' -f (Get-Date).ToString('s')
 
                 if ($Force.IsPresent) {
-                    Get-NetEventSession -CimSession $CimSession | ForEach-Object {
+                    Get-NetEventSession @CimSession | ForEach-Object {
                         if ($_.SessionStatus -eq 'Running') {
-                            $_ | Stop-NetEventSession -CimSession $CimSession
+                            $_ | Stop-NetEventSession @CimSession
                         }
-                        $_ | Remove-NetEventSession -CimSession $CimSession
+                        $_ | Remove-NetEventSession @CimSession
                     }
                 }
 
                 try {
-                    New-NetEventSession -Name $SessionName -LocalFilePath $ETLFilePath -CaptureMode SaveToFile -CimSession $CimSession -ErrorAction Stop | Out-Null
+                    New-NetEventSession -Name $SessionName -LocalFilePath $ETLFilePath -CaptureMode SaveToFile @CimSession -ErrorAction Stop | Out-Null
                 } catch [Microsoft.Management.Infrastructure.CimException] {
                     if ($_.Exception.NativeErrorCode -eq 'AlreadyExists') {
                         $Message = "Another NetEventSession already exists. Run Invoke-DiscoveryProtocolCapture with -Force switch to remove existing NetEventSessions."
@@ -233,15 +247,14 @@ function Invoke-DiscoveryProtocolCapture {
                 $PacketCaptureParams = @{
                     SessionName      = $SessionName
                     TruncationLength = 0
-                    CaptureType      = 'Physical'
-                    CimSession       = $CimSession
+                    CaptureType      = 'Physical'                    
                     LinkLayerAddress = $LinkLayerAddress
                 }
 
-                Add-NetEventPacketCaptureProvider @PacketCaptureParams | Out-Null
-                Add-NetEventNetworkAdapter -Name $Adapter.Name -PromiscuousMode $True -CimSession $CimSession | Out-Null
+                Add-NetEventPacketCaptureProvider @PacketCaptureParams @CimSession | Out-Null
+                Add-NetEventNetworkAdapter -Name $Adapter.Name -PromiscuousMode $True @CimSession | Out-Null
 
-                Start-NetEventSession -Name $SessionName -CimSession $CimSession
+                Start-NetEventSession -Name $SessionName @CimSession
 
                 $Seconds = $Duration
                 $End = (Get-Date).AddSeconds($Seconds)
@@ -252,11 +265,15 @@ function Invoke-DiscoveryProtocolCapture {
                     [System.Threading.Thread]::Sleep(500)
                 }
 
-                Stop-NetEventSession -Name $SessionName -CimSession $CimSession
+                Stop-NetEventSession -Name $SessionName @CimSession
 
-                $Events = Invoke-Command -Session $PSSession -ScriptBlock {
+                $Events = Invoke-Command @PSSession -ScriptBlock {
+                    param(
+                        $ETLFilePath
+                    )
+
                     try {
-                        $Events = Get-WinEvent -Path $ETLFile.FullName -Oldest -FilterXPath "*[System[EventID=1001]]" -ErrorAction Stop
+                        $Events = Get-WinEvent -Path $ETLFilePath -Oldest -FilterXPath "*[System[EventID=1001]]" -ErrorAction Stop
                     } catch {
                         if ($_.FullyQualifiedErrorId -notmatch 'NoMatchingEventsFound') {
                             Write-Error -Exception $_
@@ -277,7 +294,7 @@ function Invoke-DiscoveryProtocolCapture {
                         $EventData.FragmentSize, $EventData.Fragment = $Event.GetPropertyValues($PropertySelector)
                         $EventData
                     }
-                }
+                } -ArgumentList $ETLFilePath
 
                 $FoundPacket = $null
 
@@ -295,15 +312,21 @@ function Invoke-DiscoveryProtocolCapture {
                     }
                 }
 
-                Remove-NetEventSession -Name $SessionName -CimSession $CimSession
+                Remove-NetEventSession -Name $SessionName @CimSession
 
                 if (-not $NoCleanup.IsPresent) {
-                    Invoke-Command -Session $PSSession -ScriptBlock {
-                        Remove-Item -Path $ETLFile.FullName -Force
-                    }
+                    Invoke-Command @PSSession -ScriptBlock {
+                        param(
+                            $ETLFilePath
+                        )
+
+                        Remove-Item -Path $ETLFilePath -Force
+                    } -ArgumentList $ETLFilePath
                 }
 
-                Remove-PSSession -Session $PSSession
+                if ($env:COMPUTERNAME -ne $Computer) {
+                    Remove-PSSession @PSSession
+                }
 
                 if ($FoundPacket) {
                     $FoundPacket
