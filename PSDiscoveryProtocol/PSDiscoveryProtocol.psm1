@@ -134,22 +134,35 @@ function Invoke-DiscoveryProtocolCapture {
 
 #>
 
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParametersetName='LocalCapture')]
     [OutputType('DiscoveryProtocolPacket')]
     [Alias('Capture-CDPPacket', 'Capture-LLDPPacket')]
     param(
-        [Parameter(Position=0,
+        [Parameter(ParameterSetName='RemoteCapture',
+            Mandatory=$false,
+            Position=0,
             ValueFromPipeline=$true,
             ValueFromPipelineByPropertyName=$true)]
         [Alias('CN', 'Computer')]
         [String[]]$ComputerName = $env:COMPUTERNAME,
 
-        [Parameter(Position=1)]
+        [Parameter(ParameterSetName='LocalCapture',
+            Position=0)]
+        [Parameter(ParameterSetName='RemoteCapture',
+            Position=1)]
         [Int16]$Duration = $(if ($Type -eq 'LLDP') { 32 } else { 62 }),
 
-        [Parameter(Position=2)]
+        [Parameter(ParameterSetName='LocalCapture',
+            Position=1)]
+        [Parameter(ParameterSetName='RemoteCapture',
+            Position=2)]
         [ValidateSet('CDP', 'LLDP')]
         [String]$Type,
+
+        [Parameter(ParameterSetName='RemoteCapture')]
+        [ValidateNotNull()]
+        [System.Management.Automation.Credential()]
+        [PSCredential]$Credential = [System.Management.Automation.PSCredential]::Empty,
 
         [Parameter()]
         [switch]$NoCleanup,
@@ -159,10 +172,12 @@ function Invoke-DiscoveryProtocolCapture {
     )
 
     begin {
-        $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-        $Principal = New-Object Security.Principal.WindowsPrincipal $Identity
-        if (-not $Principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
-            throw 'Invoke-DiscoveryProtocolCapture requires elevation. Please run PowerShell as administrator.'
+        if ($PSCmdlet.ParameterSetName -eq 'LocalCapture') {
+            $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+            $Principal = New-Object Security.Principal.WindowsPrincipal $Identity
+            if (-not $Principal.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
+                throw 'Invoke-DiscoveryProtocolCapture requires elevation. Please run PowerShell as administrator.'
+            }
         }
 
         if ($MyInvocation.InvocationName -ne $MyInvocation.MyCommand) {
@@ -174,29 +189,54 @@ function Invoke-DiscoveryProtocolCapture {
     }
 
     process {
-
         foreach ($Computer in $ComputerName) {
+            Write-Verbose "ParameterSetName: $($PSCmdlet.ParameterSetName)"
+            Write-Verbose "TargetComputer: $Computer"
 
-            if ($env:COMPUTERNAME -eq $Computer) {
-                Write-Verbose "Local computer detected..."
-                
+            if ($PSCmdlet.ParameterSetName -eq 'LocalCapture') {
                 $CimSession = @{}
                 $PSSession = @{}
             }
             else {
-                Write-Verbose "Creating remote sessions..."
+                $PSCredential = @{}
+                if ($PSBoundParameters.ContainsKey('Credential')) {
+                    $PSCredential.Add('Credential', $Credential)
+                }
 
                 try {
                     $CimSession = @{
-                        CimSession = New-CimSession -ComputerName $Computer -ErrorAction Stop
+                        CimSession = New-CimSession -ComputerName $Computer -ErrorAction Stop @PSCredential
                     }
+                } catch [Microsoft.Management.Infrastructure.CimException] {
+                    if ($_.CategoryInfo.Category -eq 'PermissionDenied') {
+                        Write-Warning "Access Denied on $Computer. You can try to connect using -Credential."
+                    } elseif ($_.CategoryInfo.Category -eq 'ConnectionError') {
+                        Write-Warning "Unable to create CimSession. Please make sure WinRM and PSRemoting is enabled on $Computer."
+                    } else {
+                        Write-Error -ErrorRecord $_
+                    }
+                    continue
                 } catch {
-                    Write-Warning "Unable to create CimSession. Please make sure WinRM and PSRemoting is enabled on $Computer."
+                    Write-Error -ErrorRecord $_
                     continue
                 }
 
-                $PSSession = @{
-                    Session = New-PSSession -ComputerName $Computer
+                try {
+                    $PSSession = @{
+                        Session = New-PSSession -ComputerName $Computer -ErrorAction Stop @PSCredential
+                    }
+                } catch [System.Management.Automation.Remoting.PSRemotingTransportException] {
+                    if ($_.Exception.ErrorCode -eq 5) {
+                        Write-Warning "Access Denied on $Computer. You can try to connect using -Credential."
+                    } elseif ($_.Exception.ErrorCode -eq -2144108526) {
+                        Write-Warning "Unable to create CimSession. Please make sure WinRM and PSRemoting is enabled on $Computer."
+                    } else {
+                        Write-Error -ErrorRecord $_
+                    }
+                    continue
+                } catch {
+                    Write-Error -ErrorRecord $_
+                    continue
                 }
             }
 
@@ -206,15 +246,14 @@ function Invoke-DiscoveryProtocolCapture {
                 $ETLFile.FullName
             }
 
-            Write-Verbose "ETL File Path: $ETLFilePath"
+            Write-Verbose "ETLFilePath: $ETLFilePath"
 
             $Adapter = Get-NetAdapter -Physical @CimSession |
                 Where-Object {$_.Status -eq 'Up' -and $_.InterfaceType -eq 6} |
                 Select-Object -First 1 Name, MacAddress
 
-            $MACAddress = [PhysicalAddress]::Parse($Adapter.MacAddress).ToString()
-
             if ($Adapter) {
+                $MACAddress = [PhysicalAddress]::Parse($Adapter.MacAddress).ToString()
                 $SessionName = 'Capture-{0}' -f (Get-Date).ToString('s')
 
                 if ($Force.IsPresent) {
@@ -232,10 +271,10 @@ function Invoke-DiscoveryProtocolCapture {
                     if ($_.Exception.NativeErrorCode -eq 'AlreadyExists') {
                         $Message = "Another NetEventSession already exists. Run Invoke-DiscoveryProtocolCapture with -Force switch to remove existing NetEventSessions."
                         Write-Error -Message $Message
-                        return
                     } else {
-                        Write-Error -Exception $_
+                        Write-Error -ErrorRecord $_
                     }
+                    continue
                 }
 
                 $LinkLayerAddress = switch ($Type) {
@@ -247,7 +286,7 @@ function Invoke-DiscoveryProtocolCapture {
                 $PacketCaptureParams = @{
                     SessionName      = $SessionName
                     TruncationLength = 0
-                    CaptureType      = 'Physical'                    
+                    CaptureType      = 'Physical'
                     LinkLayerAddress = $LinkLayerAddress
                 }
 
@@ -276,7 +315,7 @@ function Invoke-DiscoveryProtocolCapture {
                         $Events = Get-WinEvent -Path $ETLFilePath -Oldest -FilterXPath "*[System[EventID=1001]]" -ErrorAction Stop
                     } catch {
                         if ($_.FullyQualifiedErrorId -notmatch 'NoMatchingEventsFound') {
-                            Write-Error -Exception $_
+                            Write-Error -ErrorRecord $_
                         }
                     }
 
@@ -324,8 +363,9 @@ function Invoke-DiscoveryProtocolCapture {
                     } -ArgumentList $ETLFilePath
                 }
 
-                if ($env:COMPUTERNAME -ne $Computer) {
+                if ($PSCmdlet.ParameterSetName -eq 'RemoteCapture') {
                     Remove-PSSession @PSSession
+                    Remove-CimSession @CimSession
                 }
 
                 if ($FoundPacket) {
