@@ -586,36 +586,43 @@ function ConvertFrom-CDPPacket {
                 $NumberOfAddresses = [System.BitConverter]::ToUInt32($Reader.ReadBytes(4)[3..0], 0)
                 $Addresses = New-Object System.Collections.Generic.List[String]
 
-                1..$NumberOfAddresses | ForEach-Object {
-                    $ProtocolType = $Reader.ReadByte()
-                    $ProtocolLength = $Reader.ReadByte()
+                if ($NumberOfAddresses -gt 0) {
+                    1..$NumberOfAddresses | ForEach-Object {
+                        $ProtocolType = $Reader.ReadByte()
+                        $ProtocolLength = $Reader.ReadByte()
 
-                    if ($ProtocolLength -eq 1) {
-                        $Protocol = $Reader.ReadByte()
-                    } else {
-                        $Protocol = [System.BitConverter]::ToInt64($Reader.ReadBytes(8)[7..0], 0)
+                        if ($ProtocolLength -eq 1) {
+                            $Protocol = $Reader.ReadByte()
+                        } else {
+                            $Protocol = [System.BitConverter]::ToInt64($Reader.ReadBytes(8)[7..0], 0)
+                        }
+
+                        $AddressLength = [System.BitConverter]::ToUInt16($Reader.ReadBytes(2)[1..0], 0)
+                        $AddressBytes = $Reader.ReadBytes($AddressLength)
+
+                        if (($ProtocolType -eq 0x01 -and $Protocol -eq $IPv4) -or ($ProtocolType -eq 0x02 -and $Protocol -eq $IPv6)) {
+                            $IPAddress = [System.Net.IPAddress]::new($AddressBytes).IPAddressToString
+                            $Addresses.Add($IPAddress)
+                        } else {
+                            $ProtocolBytes = [System.BitConverter]::GetBytes($Protocol)[7..0]
+                            $ProtocolHex = [System.BitConverter]::ToString($ProtocolBytes)
+                            $AddressHex = [System.BitConverter]::ToString($AddressBytes)
+
+                            Write-Verbose "TlvType        : $TlvType"
+                            Write-Verbose "TlvLength      : $TlvLength"
+                            Write-Verbose "ProtocolType   : $ProtocolType"
+                            Write-Verbose "ProtocolLength : $ProtocolLength"
+                            Write-Verbose "ProtocolHex    : $ProtocolHex"
+                            Write-Verbose "AddressLength  : $AddressLength"
+                            Write-Verbose "AddressHex     : $AddressHex"
+                            Write-Verbose "----------------------------------------------------------------"
+                        }
                     }
-
-                    $AddressLength = [System.BitConverter]::ToUInt16($Reader.ReadBytes(2)[1..0], 0)
-                    $AddressBytes = $Reader.ReadBytes($AddressLength)
-
-                    if (($ProtocolType -eq 0x01 -and $Protocol -eq $IPv4) -or ($ProtocolType -eq 0x02 -and $Protocol -eq $IPv6)) {
-                        $IPAddress = [System.Net.IPAddress]::new($AddressBytes).IPAddressToString
-                        $Addresses.Add($IPAddress)
-                    } else {
-                        $ProtocolBytes = [System.BitConverter]::GetBytes($Protocol)[7..0]
-                        $ProtocolHex = [System.BitConverter]::ToString($ProtocolBytes)
-                        $AddressHex = [System.BitConverter]::ToString($AddressBytes)
-
-                        Write-Verbose "TlvType        : $TlvType"
-                        Write-Verbose "TlvLength      : $TlvLength"
-                        Write-Verbose "ProtocolType   : $ProtocolType"
-                        Write-Verbose "ProtocolLength : $ProtocolLength"
-                        Write-Verbose "ProtocolHex    : $ProtocolHex"
-                        Write-Verbose "AddressLength  : $AddressLength"
-                        Write-Verbose "AddressHex     : $AddressHex"
-                        Write-Verbose "----------------------------------------------------------------"
-                    }
+                } else {
+                    Write-Verbose "TlvType        : $TlvType"
+                    Write-Verbose "TlvLength      : $TlvLength"
+                    Write-Verbose "NumOfAddresses : $NumberOfAddresses"
+                    Write-Verbose "----------------------------------------------------------------"
                 }
 
                 if ($Addresses.Count -gt 0) {
