@@ -53,12 +53,14 @@ function Invoke-DiscoveryProtocolCapture {
 
     Cisco devices will by default send CDP announcements every 60 seconds. Default interval for LLDP packets is 30 seconds.
 
-    Requires elevation (Run as Administrator).
-    WinRM and PowerShell remoting must be enabled on the target computer.
+    Requires elevation (Run as Administrator) for local capture.
+    WinRM and PowerShell remoting must be enabled on target computer for remote capture.
 
 .PARAMETER ComputerName
 
     Specifies one or more computers on which to capture packets. Defaults to $env:COMPUTERNAME.
+
+    If specified, remote capture is assumed and therefore WinRM must be enabled on target.
 
 .PARAMETER Duration
 
@@ -80,6 +82,10 @@ function Invoke-DiscoveryProtocolCapture {
 .PARAMETER Force
 
     If specified, any existing NetEventSession will be removed.
+
+.PARAMETER Credential
+
+    Use this with remote capture if current user do not have administrative privileges on the target computer.
 
 .OUTPUTS
 
