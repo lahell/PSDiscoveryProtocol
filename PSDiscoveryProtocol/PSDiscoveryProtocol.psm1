@@ -271,7 +271,7 @@ function Invoke-DiscoveryProtocolCapture {
             Select-Object Name, MacAddress, InterfaceDescription, InterfaceIndex
 
             if ($Adapters) {
-                $MACAddresses = $Adapters.MacAddress.ForEach({[PhysicalAddress]::Parse($_).ToString()})
+                $MACAddresses = $Adapters.MacAddress.ForEach({ [PhysicalAddress]::Parse($_).ToString() })
                 $SessionName = 'Capture-{0}' -f (Get-Date).ToString('s')
 
                 if ($Force.IsPresent) {
@@ -351,19 +351,19 @@ function Invoke-DiscoveryProtocolCapture {
 
                     $PropertySelector = [System.Diagnostics.Eventing.Reader.EventLogPropertySelector]::new($XpathQueries)
 
-                    foreach ($Event in $Events) {
-                        $EventData = $Event | Select-Object MachineName, TimeCreated
+                    foreach ($WinEvent in $Events) {
+                        $EventData = $WinEvent | Select-Object MachineName, TimeCreated
                         $EventData | Add-Member -NotePropertyName FragmentSize -NotePropertyValue $null
                         $EventData | Add-Member -NotePropertyName Fragment -NotePropertyValue $null
                         $EventData | Add-Member -NotePropertyName MiniportIfIndex -NotePropertyValue $null
-                        $EventData.FragmentSize, $EventData.Fragment, $EventData.MiniportIfIndex = $Event.GetPropertyValues($PropertySelector)
-                        $Adapter = (Get-NetAdapter -Physical).Where({$_.InterfaceIndex -eq $EventData.MiniportIfIndex})
+                        $EventData.FragmentSize, $EventData.Fragment, $EventData.MiniportIfIndex = $WinEvent.GetPropertyValues($PropertySelector)
+                        $Adapter = (Get-NetAdapter -Physical).Where({ $_.InterfaceIndex -eq $EventData.MiniportIfIndex })
                         $EventData | Add-Member -NotePropertyName Connection -NotePropertyValue $Adapter.Name
                         $EventData | Add-Member -NotePropertyName Interface -NotePropertyValue $Adapter.InterfaceDescription
                         $EventData
                     }
                 } -ArgumentList $ETLFilePath
-                
+
                 $FoundPackets = $Events -as [DiscoveryProtocolPacket[]] | Where-Object {
                     $_.IsDiscoveryProtocolPacket -and $_.SourceAddress -notin $MACAddresses
                 } | Group-Object MiniportIfIndex | ForEach-Object {
