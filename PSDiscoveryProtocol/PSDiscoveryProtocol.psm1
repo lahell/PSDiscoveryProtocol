@@ -4,12 +4,18 @@ class DiscoveryProtocolPacket {
     [datetime]$TimeCreated
     [int]$FragmentSize
     [byte[]]$Fragment
+    [int]$MiniportIfIndex
+    [string]$Connection
+    [string]$Interface
 
-    DiscoveryProtocolPacket([string]$MachineName, [datetime]$TimeCreated, [int]$FragmentSize, [byte[]]$Fragment) {
-        $this.MachineName = $MachineName
-        $this.TimeCreated = $TimeCreated
-        $this.FragmentSize = $FragmentSize
-        $this.Fragment = $Fragment
+    DiscoveryProtocolPacket([PSCustomObject]$WinEvent) {
+        $this.MachineName = $WinEvent.MachineName
+        $this.TimeCreated = $WinEvent.TimeCreated
+        $this.FragmentSize = $WinEvent.FragmentSize
+        $this.Fragment = $WinEvent.Fragment
+        $this.MiniportIfIndex = $WinEvent.MiniportIfIndex
+        $this.Connection = $WinEvent.Connection
+        $this.Interface = $WinEvent.Interface
 
         Add-Member -InputObject $this -MemberType ScriptProperty -Name IsDiscoveryProtocolPacket -Value {
             if (
@@ -260,12 +266,12 @@ function Invoke-DiscoveryProtocolCapture {
 
             Write-Verbose "ETLFilePath: $ETLFilePath"
 
-            $Adapter = Get-NetAdapter -Physical @CimSession |
+            $Adapters = Get-NetAdapter -Physical @CimSession |
             Where-Object { $_.Status -eq 'Up' -and $_.InterfaceType -eq 6 } |
-            Select-Object -First 1 Name, MacAddress
+            Select-Object Name, MacAddress, InterfaceDescription, InterfaceIndex
 
-            if ($Adapter) {
-                $MACAddress = [PhysicalAddress]::Parse($Adapter.MacAddress).ToString()
+            if ($Adapters) {
+                $MACAddresses = $Adapters.MacAddress.ForEach({[PhysicalAddress]::Parse($_).ToString()})
                 $SessionName = 'Capture-{0}' -f (Get-Date).ToString('s')
 
                 if ($Force.IsPresent) {
@@ -305,7 +311,10 @@ function Invoke-DiscoveryProtocolCapture {
                 }
 
                 Add-NetEventPacketCaptureProvider @PacketCaptureParams @CimSession | Out-Null
-                Add-NetEventNetworkAdapter -Name $Adapter.Name -PromiscuousMode $True @CimSession | Out-Null
+
+                foreach ($Adapter in $Adapters) {
+                    Add-NetEventNetworkAdapter -Name $Adapter.Name -PromiscuousMode $True @CimSession | Out-Null
+                }
 
                 Start-NetEventSession -Name $SessionName @CimSession
 
@@ -337,6 +346,7 @@ function Invoke-DiscoveryProtocolCapture {
                     [string[]]$XpathQueries = @(
                         "Event/EventData/Data[@Name='FragmentSize']"
                         "Event/EventData/Data[@Name='Fragment']"
+                        "Event/EventData/Data[@Name='MiniportIfIndex']"
                     )
 
                     $PropertySelector = [System.Diagnostics.Eventing.Reader.EventLogPropertySelector]::new($XpathQueries)
@@ -345,25 +355,19 @@ function Invoke-DiscoveryProtocolCapture {
                         $EventData = $Event | Select-Object MachineName, TimeCreated
                         $EventData | Add-Member -NotePropertyName FragmentSize -NotePropertyValue $null
                         $EventData | Add-Member -NotePropertyName Fragment -NotePropertyValue $null
-                        $EventData.FragmentSize, $EventData.Fragment = $Event.GetPropertyValues($PropertySelector)
+                        $EventData | Add-Member -NotePropertyName MiniportIfIndex -NotePropertyValue $null
+                        $EventData.FragmentSize, $EventData.Fragment, $EventData.MiniportIfIndex = $Event.GetPropertyValues($PropertySelector)
+                        $Adapter = (Get-NetAdapter -Physical).Where({$_.InterfaceIndex -eq $EventData.MiniportIfIndex})
+                        $EventData | Add-Member -NotePropertyName Connection -NotePropertyValue $Adapter.Name
+                        $EventData | Add-Member -NotePropertyName Interface -NotePropertyValue $Adapter.InterfaceDescription
                         $EventData
                     }
                 } -ArgumentList $ETLFilePath
-
-                $FoundPacket = $null
-
-                foreach ($Event in $Events) {
-                    $Packet = [DiscoveryProtocolPacket]::new(
-                        $Event.MachineName,
-                        $Event.TimeCreated,
-                        $Event.FragmentSize,
-                        $Event.Fragment
-                    )
-
-                    if ($Packet.IsDiscoveryProtocolPacket -and $Packet.SourceAddress -ne $MACAddress) {
-                        $FoundPacket = $Packet
-                        break
-                    }
+                
+                $FoundPackets = $Events -as [DiscoveryProtocolPacket[]] | Where-Object {
+                    $_.IsDiscoveryProtocolPacket -and $_.SourceAddress -notin $MACAddresses
+                } | Group-Object MiniportIfIndex | ForEach-Object {
+                    $_.Group | Select-Object -First 1
                 }
 
                 Remove-NetEventSession -Name $SessionName @CimSession
@@ -383,8 +387,8 @@ function Invoke-DiscoveryProtocolCapture {
                     Remove-CimSession @CimSession
                 }
 
-                if ($FoundPacket) {
-                    $FoundPacket
+                if ($FoundPackets) {
+                    $FoundPackets
                 }
                 else {
                     Write-Warning "No discovery protocol packets captured on $Computer in $Seconds seconds."
@@ -488,15 +492,17 @@ function Get-DiscoveryProtocolData {
     }
 
     process {
-        foreach ($item in $Packet) {
-            switch ($item.DiscoveryProtocolType) {
-                'CDP' { $PacketData = ConvertFrom-CDPPacket -Packet $item.Fragment }
-                'LLDP' { $PacketData = ConvertFrom-LLDPPacket -Packet $item.Fragment }
+        foreach ($Item in $Packet) {
+            switch ($Item.DiscoveryProtocolType) {
+                'CDP' { $PacketData = ConvertFrom-CDPPacket -Packet $Item.Fragment }
+                'LLDP' { $PacketData = ConvertFrom-LLDPPacket -Packet $Item.Fragment }
                 Default { throw 'No valid CDP or LLDP found in $Packet' }
             }
 
-            $PacketData | Add-Member -NotePropertyName Computer -NotePropertyValue $item.MachineName
-            $PacketData | Add-Member -NotePropertyName Type -NotePropertyValue $item.DiscoveryProtocolType
+            $PacketData | Add-Member -NotePropertyName Computer -NotePropertyValue $Item.MachineName
+            $PacketData | Add-Member -NotePropertyName Connection -NotePropertyValue $Item.Connection
+            $PacketData | Add-Member -NotePropertyName Interface -NotePropertyValue $Item.Interface
+            $PacketData | Add-Member -NotePropertyName Type -NotePropertyValue $Item.DiscoveryProtocolType
             $PacketData
         }
     }
