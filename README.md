@@ -1,3 +1,6 @@
+![PowerShell Gallery Version](https://img.shields.io/powershellgallery/v/PSDiscoveryProtocol?color=808000&logo=powershell&logoColor=lightgrey&style=flat-square)
+![PowerShell Gallery](https://img.shields.io/powershellgallery/dt/PSDiscoveryProtocol?color=808000&style=flat-square)
+![GitHub](https://img.shields.io/github/license/lahell/PSDiscoveryProtocol?color=808000&style=flat-square)
 ## PSDiscoveryProtocol
 
 Capture and parse CDP and LLDP packets on local or remote computers
