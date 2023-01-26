@@ -12,7 +12,7 @@
 RootModule = 'PSDiscoveryProtocol'
 
 # Version number of this module.
-ModuleVersion = '1.4.1'
+ModuleVersion = '1.4.2'
 
 # Supported PSEditions
 CompatiblePSEditions = @('Desktop', 'Core')
@@ -27,7 +27,7 @@ Author = 'lahell'
 # CompanyName = ''
 
 # Copyright statement for this module
-Copyright = '(c) 2019 lahell. All rights reserved.'
+Copyright = '(c) 2023 lahell. All rights reserved.'
 
 # Description of the functionality provided by this module
 Description = 'Capture and parse CDP and LLDP packets on local or remote computers'
