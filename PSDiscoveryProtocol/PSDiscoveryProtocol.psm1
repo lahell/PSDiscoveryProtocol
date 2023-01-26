@@ -266,7 +266,7 @@ function Invoke-DiscoveryProtocolCapture {
 
             Write-Verbose "ETLFilePath: $ETLFilePath"
 
-            $Adapters = Get-NetAdapter -Physical @CimSession |
+            $Adapters = Get-NetAdapter @CimSession |
             Where-Object { $_.Status -eq 'Up' -and $_.InterfaceType -eq 6 } |
             Select-Object Name, MacAddress, InterfaceDescription, InterfaceIndex
 
@@ -357,7 +357,7 @@ function Invoke-DiscoveryProtocolCapture {
                         $EventData | Add-Member -NotePropertyName Fragment -NotePropertyValue $null
                         $EventData | Add-Member -NotePropertyName MiniportIfIndex -NotePropertyValue $null
                         $EventData.FragmentSize, $EventData.Fragment, $EventData.MiniportIfIndex = $WinEvent.GetPropertyValues($PropertySelector)
-                        $Adapter = @(Get-NetAdapter -Physical).Where({ $_.InterfaceIndex -eq $EventData.MiniportIfIndex })
+                        $Adapter = @(Get-NetAdapter).Where({ $_.InterfaceIndex -eq $EventData.MiniportIfIndex })
                         $EventData | Add-Member -NotePropertyName Connection -NotePropertyValue $Adapter.Name
                         $EventData | Add-Member -NotePropertyName Interface -NotePropertyValue $Adapter.InterfaceDescription
                         $EventData
