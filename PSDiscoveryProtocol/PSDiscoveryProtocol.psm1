@@ -306,7 +306,7 @@ function Invoke-DiscoveryProtocolCapture {
                 $PacketCaptureParams = @{
                     SessionName      = $SessionName
                     TruncationLength = 0
-                    CaptureType      = 'Physical'
+                    CaptureType      = 'BothPhysicalAndSwitch'
                     LinkLayerAddress = $LinkLayerAddress
                 }
 
