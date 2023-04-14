@@ -892,6 +892,224 @@ function ConvertFrom-LLDPPacket {
                         $Hash.Add('VLAN', [BitConverter]::ToUInt16($Packet[($Offset + 5)..($Offset + 4)], 0))
                     }
 
+                    if ($OUI -eq '00-80-C2' -and $Subtype -eq 9) {
+                        $ETSMask = [uint16]0x000F
+                        $Pri0To3 = [BitConverter]::ToUInt16($Packet[($Offset + 6)..($Offset + 5)], 0)
+                        $Pri4To7 = [BitConverter]::ToUInt16($Packet[($Offset + 8)..($Offset + 7)], 0)
+
+                        $ETS = [PSCustomObject]@{
+                            Willing = ($Packet[($Offset + 4)] -band (1 -shl 7)) -ne 0
+                            PriorityAssignmentTable = @(
+                                [PSCustomObject]@{
+                                    Priority = 0
+                                    TrafficClass = ($Pri0To3 -shr 12) -band $ETSMask
+                                }
+                                [PSCustomObject]@{
+                                    Priority = 1
+                                    TrafficClass = ($Pri0To3 -shr 8) -band $ETSMask
+                                }
+                                [PSCustomObject]@{
+                                    Priority = 2
+                                    TrafficClass = ($Pri0To3 -shr 4) -band $ETSMask
+                                }
+                                [PSCustomObject]@{
+                                    Priority = 3
+                                    TrafficClass = $Pri0To3 -band $ETSMask
+                                }
+                                [PSCustomObject]@{
+                                    Priority = 4
+                                    TrafficClass = ($Pri4To7 -shr 12) -band $ETSMask
+                                }
+                                [PSCustomObject]@{
+                                    Priority = 5
+                                    TrafficClass = ($Pri4To7 -shr 8) -band $ETSMask
+                                }
+                                [PSCustomObject]@{
+                                    Priority = 6
+                                    TrafficClass = ($Pri4To7 -shr 4) -band $ETSMask
+                                }
+                                [PSCustomObject]@{
+                                    Priority = 7
+                                    TrafficClass = $Pri4To7 -band $ETSMask
+                                }
+                            )
+                            BandwidthAssignmentTable = @(
+                                [PSCustomObject]@{
+                                    Priority = 0
+                                    Bandwidth = $Packet[($Offset + 9)]
+                                }
+                                [PSCustomObject]@{
+                                    Priority = 1
+                                    Bandwidth = $Packet[($Offset + 10)]
+                                }
+                                [PSCustomObject]@{
+                                    Priority = 2
+                                    Bandwidth = $Packet[($Offset + 11)]
+                                }
+                                [PSCustomObject]@{
+                                    Priority = 3
+                                    Bandwidth = $Packet[($Offset + 12)]
+                                }
+                                [PSCustomObject]@{
+                                    Priority = 4
+                                    Bandwidth = $Packet[($Offset + 13)]
+                                }
+                                [PSCustomObject]@{
+                                    Priority = 5
+                                    Bandwidth = $Packet[($Offset + 14)]
+                                }
+                                [PSCustomObject]@{
+                                    Priority = 6
+                                    Bandwidth = $Packet[($Offset + 15)]
+                                }
+                                [PSCustomObject]@{
+                                    Priority = 7
+                                    Bandwidth = $Packet[($Offset + 16)]
+                                }
+                            )
+                        }
+
+                        if (-not ($Hash.ContainsKey('DCBX'))) {
+                            $Hash.Add('DCBX', [PSCustomObject]@{IEEE = [PSCustomObject]@{}})
+                        }
+
+                        $Hash.DCBX.IEEE | Add-Member -NotePropertyName ETS -NotePropertyValue $ETS
+                    }
+
+                    if ($OUI -eq '00-80-C2' -and $Subtype -eq 11) {
+                        $PFC = [PSCustomObject]@{
+                            Willing = ($Packet[($Offset + 4)] -band (1 -shl 7)) -ne 0
+                            FlowControl = 0..7 | ForEach-Object {
+                                [PSCustomObject]@{
+                                    Priority = $_
+                                    Enabled = ($Packet[($Offset + 5)] -band (1 -shl $_)) -ne 0
+                                }
+                            }
+                        }
+
+                        if (-not ($Hash.ContainsKey('DCBX'))) {
+                            $Hash.Add('DCBX', [PSCustomObject]@{IEEE = [PSCustomObject]@{}})
+                        }
+
+                        $Hash.DCBX.IEEE | Add-Member -NotePropertyName PFC -NotePropertyValue $PFC
+                    }
+
+                    if ($OUI -eq '00-1B-21' -and $Subtype -eq 2) {
+                        if (-not ($Hash.ContainsKey('DCBX'))) {
+                            $Hash.Add('DCBX', [PSCustomObject]@{CEE = [PSCustomObject]@{}})
+                        }
+
+                        $DCBXTLVBuffer = $Packet[($Offset + 4)..($Offset + $Length - 1)]
+                        $DCBXTLVOffset = 0
+
+                        while ($DCBXTLVOffset -lt $DCBXTLVBuffer.Length) {
+                            $DCBXTLVType = $DCBXTLVBuffer[($DCBXTLVOffset)] -shr 1
+                            $DCBXTLVLength = [BitConverter]::ToUInt16($DCBXTLVBuffer[($DCBXTLVOffset + 1)..$DCBXTLVOffset], 0) -band $Mask
+                            $DCBXTLVOffset += 2
+
+                            Write-Verbose "DCBXTLVType    : $DCBXTLVType"
+                            Write-Verbose "DCBXTLVLength  : $DCBXTLVLength"
+
+                            if ($DCBXTLVType -eq 2) {
+                                $ETSMask = [uint16]0x000F
+                                $Pri0To3 = [BitConverter]::ToUInt16($DCBXTLVBuffer[($DCBXTLVOffset + 5)..($DCBXTLVOffset + 4)], 0)
+                                $Pri4To7 = [BitConverter]::ToUInt16($DCBXTLVBuffer[($DCBXTLVOffset + 7)..($DCBXTLVOffset + 6)], 0)
+
+                                $ETS = [PSCustomObject]@{
+                                    Enabled = ($DCBXTLVBuffer[($DCBXTLVOffset + 2)] -band (1 -shl 7)) -ne 0
+                                    Willing = ($DCBXTLVBuffer[($DCBXTLVOffset + 2)] -band (1 -shl 6)) -ne 0
+                                    PriorityAssignmentTable = @(
+                                        [PSCustomObject]@{
+                                            Priority = 0
+                                            TrafficClass = ($Pri0To3 -shr 12) -band $ETSMask
+                                        }
+                                        [PSCustomObject]@{
+                                            Priority = 1
+                                            TrafficClass = ($Pri0To3 -shr 8) -band $ETSMask
+                                        }
+                                        [PSCustomObject]@{
+                                            Priority = 2
+                                            TrafficClass = ($Pri0To3 -shr 4) -band $ETSMask
+                                        }
+                                        [PSCustomObject]@{
+                                            Priority = 3
+                                            TrafficClass = $Pri0To3 -band $ETSMask
+                                        }
+                                        [PSCustomObject]@{
+                                            Priority = 4
+                                            TrafficClass = ($Pri4To7 -shr 12) -band $ETSMask
+                                        }
+                                        [PSCustomObject]@{
+                                            Priority = 5
+                                            TrafficClass = ($Pri4To7 -shr 8) -band $ETSMask
+                                        }
+                                        [PSCustomObject]@{
+                                            Priority = 6
+                                            TrafficClass = ($Pri4To7 -shr 4) -band $ETSMask
+                                        }
+                                        [PSCustomObject]@{
+                                            Priority = 7
+                                            TrafficClass = $Pri4To7 -band $ETSMask
+                                        }
+                                    )
+                                    BandwidthAssignmentTable = @(
+                                        [PSCustomObject]@{
+                                            Priority = 0
+                                            Bandwidth = $DCBXTLVBuffer[($DCBXTLVOffset + 8)]
+                                        }
+                                        [PSCustomObject]@{
+                                            Priority = 1
+                                            Bandwidth = $DCBXTLVBuffer[($DCBXTLVOffset + 9)]
+                                        }
+                                        [PSCustomObject]@{
+                                            Priority = 2
+                                            Bandwidth = $DCBXTLVBuffer[($DCBXTLVOffset + 10)]
+                                        }
+                                        [PSCustomObject]@{
+                                            Priority = 3
+                                            Bandwidth = $DCBXTLVBuffer[($DCBXTLVOffset + 11)]
+                                        }
+                                        [PSCustomObject]@{
+                                            Priority = 4
+                                            Bandwidth = $DCBXTLVBuffer[($DCBXTLVOffset + 12)]
+                                        }
+                                        [PSCustomObject]@{
+                                            Priority = 5
+                                            Bandwidth = $DCBXTLVBuffer[($DCBXTLVOffset + 13)]
+                                        }
+                                        [PSCustomObject]@{
+                                            Priority = 6
+                                            Bandwidth = $DCBXTLVBuffer[($DCBXTLVOffset + 14)]
+                                        }
+                                        [PSCustomObject]@{
+                                            Priority = 7
+                                            Bandwidth = $DCBXTLVBuffer[($DCBXTLVOffset + 15)]
+                                        }
+                                    )
+                                }
+
+                                $Hash.DCBX.CEE | Add-Member -NotePropertyName ETS -NotePropertyValue $ETS
+                            }
+
+                            if ($DCBXTLVType -eq 3) {
+                                $PFC = [PSCustomObject]@{
+                                    Enabled = ($DCBXTLVBuffer[($DCBXTLVOffset + 2)] -band (1 -shl 7)) -ne 0
+                                    Willing = ($DCBXTLVBuffer[($DCBXTLVOffset + 2)] -band (1 -shl 6)) -ne 0
+                                    FlowControl = 0..7 | ForEach-Object {
+                                        [PSCustomObject]@{
+                                            Priority = $_
+                                            Enabled = ($DCBXTLVBuffer[($DCBXTLVOffset + 4)] -band (1 -shl $_)) -ne 0
+                                        }
+                                    }
+                                }
+
+                                $Hash.DCBX.CEE | Add-Member -NotePropertyName PFC -NotePropertyValue $PFC
+                            }
+
+                            $DCBXTLVOffset += $DCBXTLVLength
+                        }
+                    }
+
                     $Bytes = $Packet[($Offset + 4)..($Offset + $Length - 1)]
                     $Hex = [System.BitConverter]::ToString($Bytes)
                     $Ascii = [System.Text.Encoding]::ASCII.GetString($Bytes)
