@@ -573,14 +573,22 @@ function ConvertFrom-CDPPacket {
         0x0001 = 'Device'
         0x0002 = 'IPAddress'
         0x0003 = 'Port'
+        0x0004 = 'Capabilities'
+        0x0005 = 'SoftwareVersion'
         0x0006 = 'Model'
         0x000A = 'VLAN'
+        0x000B = 'Duplex'
+        0x0012 = 'TrustBitmap'
+        0x0013 = 'UntrustedPortCoS'
+        0x0014 = 'SystemName'
         0x0016 = 'Management'
     }
 
-    $TypeString = 0x0001, 0x003, 0x006
+    $TypeString = 0x0001, 0x0003, 0x0005, 0x0006, 0x0014
     $TypeAddress = 0x0002, 0x0016
-    $TypeInt = 0x000A
+    $TypeByte = 0x000B, 0x0012, 0x0013
+    $TypeShort = 0x000A
+    $TypeInt = 0x0004
 
     $IPv4 = 0xCC
     $IPv6 = 0xAAAA0300000086DD
@@ -656,9 +664,19 @@ function ConvertFrom-CDPPacket {
                 }
             }
 
-            $TypeInt {
-                $NativeVlan = [System.BitConverter]::ToUInt16($Reader.ReadBytes(2)[1..0], 0)
-                $Properties.Add($Tlv.Item([int]$TlvType), $NativeVlan)
+            { $_ -in $TypeByte } {
+                $Value = $Reader.ReadBytes(1)[0]
+                $Properties.Add($Tlv.Item([int]$TlvType), $Value)
+            }
+
+            { $_ -in $TypeShort } {
+                $Value = [System.BitConverter]::ToUInt16($Reader.ReadBytes(2)[1..0], 0)
+                $Properties.Add($Tlv.Item([int]$TlvType), $Value)
+            }
+
+            { $_ -in $TypeInt } {
+                $Value = [System.BitConverter]::ToUInt32($Reader.ReadBytes(4)[3..0], 0)
+                $Properties.Add($Tlv.Item([int]$TlvType), $Value)
             }
 
             default {
